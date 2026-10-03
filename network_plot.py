@@ -153,33 +153,147 @@ def network_figure(net, selected_bus=None):
         showlegend=False,
     ))
 
-    # Ring around the selected bus, drawn on top of everything.
     if selected_bus is not None:
-        x, y = bus_xy(net, selected_bus)
+        traces.append(ring_trace(net, selected_bus))
+
+    # Building the figure in one go is much faster than adding traces one by one.
+    return go.Figure(data=traces, layout=plain_layout(xy))
+
+
+def ring_trace(net, selected_bus):
+    """A ring around the selected bus, drawn on top of everything."""
+    x, y = bus_xy(net, selected_bus)
+    return go.Scatter(
+        x=[x], y=[y], mode="markers",
+        marker=dict(symbol="circle-open", size=22,
+                    line=dict(color="#0b0b0b", width=3)),
+        unselected=KEEP_COLOUR,
+        hoverinfo="skip", customdata=[int(selected_bus)],
+        showlegend=False,
+    )
+
+
+def plain_layout(xy):
+    """Plain background, no axes, for bus positions `xy`.
+
+    Stretches y so the grid keeps its real shape (a degree of longitude is
+    shorter than a degree of latitude here).
+    """
+    mean_lat = sum(p[1] for p in xy) / len(xy)
+    return dict(
+        height=650,
+        margin=dict(l=0, r=0, t=10, b=0),
+        hovermode="closest",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(visible=False),
+        yaxis=dict(
+            visible=False, scaleanchor="x",
+            scaleratio=1 / math.cos(math.radians(mean_lat)),
+        ),
+    )
+
+
+# Capacity scale: red for little room, green for plenty.
+# The same four colours as COLORSCALE, reversed.
+CAPACITY_COLORSCALE = [
+    [0.0, "#d03b3b"],
+    [0.2, "#ec835a"],
+    [0.5, "#fab219"],
+    [1.0, "#0ca30c"],
+]
+NO_DATA_GREY = "#c3c2b7"
+
+
+def capacity_figure(net, capacity, max_mw, selected_bus=None, placeholder=False):
+    """Map of buses coloured by hosting capacity.
+
+    `capacity` is a table indexed by bus with columns `capacity_mw` and
+    `limit` (the limit that stops a bigger project; empty if none within
+    `max_mw`). Buses missing from the table are drawn grey.
+    Lines and substations are drawn neutral grey: only buses carry a
+    capacity.
+    """
+    traces = []
+
+    # All lines as one grey trace.
+    lx, ly = [], []
+    for line in net.line.index:
+        coords = json.loads(net.line.geo[line])["coordinates"]
+        lx.extend([c[0] for c in coords] + [None])
+        ly.extend([c[1] for c in coords] + [None])
+    traces.append(go.Scatter(
+        x=lx, y=ly, mode="lines", line=dict(color=NO_DATA_GREY, width=2),
+        hoverinfo="skip", showlegend=False,
+    ))
+
+    note = "<br><i>PLACEHOLDER DATA, not real</i>" if placeholder else ""
+    buses = net.bus.index
+    xy = [bus_xy(net, b) for b in buses]
+
+    # Buses with a capacity, coloured; buses without, grey.
+    with_data = [b for b in buses if b in capacity.index]
+    without = [b for b in buses if b not in capacity.index]
+
+    hover = []
+    for b in with_data:
+        mw = capacity.capacity_mw[b]
+        limit = capacity.limit[b]
+        if isinstance(limit, str) and limit.strip():
+            stop = f"Stopped by: {limit}"
+        else:
+            stop = f"Nothing breaks up to {max_mw:g} MW"
+        hover.append(
+            f"<b>{net.bus.name[b]}</b> (bus {b})<br>"
+            f"Capacity {mw:.1f} MW<br>{stop}{note}"
+        )
+    traces.append(go.Scatter(
+        x=[bus_xy(net, b)[0] for b in with_data],
+        y=[bus_xy(net, b)[1] for b in with_data],
+        mode="markers",
+        marker=dict(
+            size=9,
+            color=[capacity.capacity_mw[b] for b in with_data],
+            colorscale=CAPACITY_COLORSCALE, cmin=0, cmax=max_mw,
+            line=dict(color="white", width=1),
+            colorbar=dict(
+                title=dict(text="Capacity (MW)", side="right"),
+                tickvals=[0, max_mw / 2, max_mw],
+                ticktext=["0", f"{max_mw / 2:g}", f"{max_mw:g}+"],
+            ),
+        ),
+        unselected=KEEP_COLOUR,
+        hoverinfo="text", text=hover, customdata=[int(b) for b in with_data],
+        showlegend=False,
+    ))
+    if without:
         traces.append(go.Scatter(
-            x=[x], y=[y], mode="markers",
-            marker=dict(symbol="circle-open", size=22,
-                        line=dict(color="#0b0b0b", width=3)),
+            x=[bus_xy(net, b)[0] for b in without],
+            y=[bus_xy(net, b)[1] for b in without],
+            mode="markers",
+            marker=dict(size=7, color=NO_DATA_GREY),
             unselected=KEEP_COLOUR,
-            hoverinfo="skip", customdata=[int(selected_bus)],
+            hoverinfo="text",
+            text=[f"<b>{net.bus.name[b]}</b> (bus {b})<br>No capacity data"
+                  for b in without],
+            customdata=[int(b) for b in without],
             showlegend=False,
         ))
 
-    # Plain background, no axes. Stretch y so the grid keeps its real shape
-    # (a degree of longitude is shorter than a degree of latitude here).
-    # Building the figure in one go is much faster than adding traces one by one.
-    mean_lat = sum(p[1] for p in xy) / len(xy)
-    return go.Figure(
-        data=traces,
-        layout=dict(
-            height=650,
-            margin=dict(l=0, r=0, t=10, b=0),
-            hovermode="closest",
-            plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(visible=False),
-            yaxis=dict(
-                visible=False, scaleanchor="x",
-                scaleratio=1 / math.cos(math.radians(mean_lat)),
-            ),
-        ),
-    )
+    # Substations as grey squares; clicking one picks its 20 kV bus.
+    traces.append(go.Scatter(
+        x=[bus_xy(net, lv)[0] for lv in net.trafo.lv_bus],
+        y=[bus_xy(net, lv)[1] for lv in net.trafo.lv_bus],
+        mode="markers",
+        marker=dict(symbol="square", size=18, color=NO_DATA_GREY,
+                    line=dict(color="#0b0b0b", width=2)),
+        unselected=KEEP_COLOUR,
+        hoverinfo="text",
+        text=[f"<b>{name}</b> (110/20 kV substation)" for name in net.trafo.name],
+        customdata=[int(lv) for lv in net.trafo.lv_bus],
+        showlegend=False,
+    ))
+
+    if selected_bus is not None:
+        traces.append(ring_trace(net, selected_bus))
+
+    return go.Figure(data=traces, layout=plain_layout(xy))
