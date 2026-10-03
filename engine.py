@@ -19,7 +19,12 @@ def add_project(net, bus, mw):
     pp.create_sgen(net, bus, p_mw=mw, name="New project")
 
 
-def check_limits(net):
+def solve(net):
+    """Run the power flow. Results land in net.res_bus, net.res_line, etc."""
+    pp.runpp(net, numba=False)
+
+
+def check(net):
     """Solve the grid and check it against the voltage and loading limits.
 
     Returns a dict with:
@@ -27,7 +32,7 @@ def check_limits(net):
       problems - list of the limits that broke, in plain words
       plus the highest voltage, line loading and transformer loading.
     """
-    pp.runpp(net, numba=False)
+    solve(net)
 
     max_voltage = net.res_bus.vm_pu.max()
     max_line = net.res_line.loading_percent.max()
