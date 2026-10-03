@@ -16,6 +16,7 @@ COLORSCALE = [
     [1.0, "#d03b3b"],
 ]
 NOMINAL_VOLTAGE_PU = 1.0
+KEEP_COLOUR = dict(marker=dict(opacity=1))
 
 
 def voltage_used(vm_pu):
@@ -45,9 +46,14 @@ def network_figure(net, selected_bus=None):
     Bus and substation points carry their bus index as `customdata`, so a
     click on the chart tells the app which bus was picked.
     """
-    fig = go.Figure()
+    traces = []
 
-    # Lines: one trace each, so each can have its own colour.
+    # Lines: a Plotly trace has one line colour, so lines are grouped by
+    # colour, in steps of 2% of the limit (too small to see). One trace per
+    # group is much faster than one per line. `None` breaks the drawing
+    # between lines in the same group.
+    groups = {}  # step -> (xs, ys, hover texts)
+    mid_x, mid_y, mid_hover = [], [], []
     for line in net.line.index:
         coords = json.loads(net.line.geo[line])["coordinates"]
         xs = [c[0] for c in coords]
@@ -57,26 +63,35 @@ def network_figure(net, selected_bus=None):
             f"<b>{net.line.name[line]}</b> (line {line})<br>"
             f"Loading {loading:.1f}% (limit {MAX_LOADING_PERCENT:.0f}%)"
         )
-        fig.add_trace(go.Scatter(
-            x=xs, y=ys, mode="lines",
-            line=dict(color=colour_for(loading_used(loading)), width=2),
-            hoverinfo="text", text=[hover] * len(xs),
-            showlegend=False,
-        ))
+        step = round(min(max(loading_used(loading), 0), 100) / 2) * 2
+        gx, gy, gtext = groups.setdefault(step, ([], [], []))
+        gx.extend(xs + [None])
+        gy.extend(ys + [None])
+        gtext.extend([hover] * len(xs) + [None])
+
         # An invisible point mid-line, so hovering the middle of a line works too.
         mid = len(coords) // 2
         if len(coords) % 2 == 0:
-            mx = (xs[mid - 1] + xs[mid]) / 2
-            my = (ys[mid - 1] + ys[mid]) / 2
+            mid_x.append((xs[mid - 1] + xs[mid]) / 2)
+            mid_y.append((ys[mid - 1] + ys[mid]) / 2)
         else:
-            mx, my = xs[mid], ys[mid]
-        fig.add_trace(go.Scatter(
-            x=[mx], y=[my], mode="markers",
-            marker=dict(size=12, opacity=0),
-            selected=dict(marker=dict(opacity=0)),
-            unselected=dict(marker=dict(opacity=0)),
-            hoverinfo="text", text=[hover], showlegend=False,
+            mid_x.append(xs[mid])
+            mid_y.append(ys[mid])
+        mid_hover.append(hover)
+
+    for step, (gx, gy, gtext) in sorted(groups.items()):
+        traces.append(go.Scatter(
+            x=gx, y=gy, mode="lines",
+            line=dict(color=colour_for(step), width=2),
+            hoverinfo="text", text=gtext, showlegend=False,
         ))
+    traces.append(go.Scatter(
+        x=mid_x, y=mid_y, mode="markers",
+        marker=dict(size=12, opacity=0),
+        selected=dict(marker=dict(opacity=0)),
+        unselected=dict(marker=dict(opacity=0)),
+        hoverinfo="text", text=mid_hover, showlegend=False,
+    ))
 
     # Buses: one trace, coloured on the shared scale, carrying the one legend.
     buses = net.bus.index
@@ -88,7 +103,8 @@ def network_figure(net, selected_bus=None):
         f"{max(voltage_used(vm[b]), 0):.0f}% of voltage room used"
         for b in buses
     ]
-    fig.add_trace(go.Scatter(
+    # Clicking selects a point. `KEEP_COLOUR` stops Plotly fading the rest.
+    traces.append(go.Scatter(
         x=[p[0] for p in xy], y=[p[1] for p in xy], mode="markers",
         marker=dict(
             size=8,
@@ -101,6 +117,7 @@ def network_figure(net, selected_bus=None):
                 ticktext=["0", "50", "100 (limit)"],
             ),
         ),
+        unselected=KEEP_COLOUR,
         hoverinfo="text", text=bus_hover, customdata=list(buses),
         showlegend=False,
     ))
@@ -124,13 +141,14 @@ def network_figure(net, selected_bus=None):
             f"110 kV side: {net.bus.name[hv_bus]} (bus {hv_bus}), "
             f"{net.res_bus.vm_pu[hv_bus]:.4f} pu"
         )
-    fig.add_trace(go.Scatter(
+    traces.append(go.Scatter(
         x=subs_x, y=subs_y, mode="markers",
         marker=dict(
             symbol="square", size=18,
             color=subs_colour, colorscale=COLORSCALE, cmin=0, cmax=100,
             line=dict(color="#0b0b0b", width=2),
         ),
+        unselected=KEEP_COLOUR,
         hoverinfo="text", text=subs_hover, customdata=subs_bus,
         showlegend=False,
     ))
@@ -138,33 +156,30 @@ def network_figure(net, selected_bus=None):
     # Ring around the selected bus, drawn on top of everything.
     if selected_bus is not None:
         x, y = bus_xy(net, selected_bus)
-        fig.add_trace(go.Scatter(
+        traces.append(go.Scatter(
             x=[x], y=[y], mode="markers",
             marker=dict(symbol="circle-open", size=22,
                         line=dict(color="#0b0b0b", width=3)),
+            unselected=KEEP_COLOUR,
             hoverinfo="skip", customdata=[int(selected_bus)],
             showlegend=False,
         ))
 
-    # Clicking selects a point; keep every other point at full colour
-    # instead of letting Plotly fade them.
-    fig.update_traces(
-        unselected=dict(marker=dict(opacity=1)),
-        selector=lambda trace: trace.customdata is not None,
-    )
-
     # Plain background, no axes. Stretch y so the grid keeps its real shape
     # (a degree of longitude is shorter than a degree of latitude here).
+    # Building the figure in one go is much faster than adding traces one by one.
     mean_lat = sum(p[1] for p in xy) / len(xy)
-    fig.update_xaxes(visible=False)
-    fig.update_yaxes(
-        visible=False, scaleanchor="x",
-        scaleratio=1 / math.cos(math.radians(mean_lat)),
+    return go.Figure(
+        data=traces,
+        layout=dict(
+            height=650,
+            margin=dict(l=0, r=0, t=10, b=0),
+            hovermode="closest",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(visible=False),
+            yaxis=dict(
+                visible=False, scaleanchor="x",
+                scaleratio=1 / math.cos(math.radians(mean_lat)),
+            ),
+        ),
     )
-    fig.update_layout(
-        height=650,
-        margin=dict(l=0, r=0, t=10, b=0),
-        hovermode="closest",
-        plot_bgcolor="rgba(0,0,0,0)",
-    )
-    return fig
