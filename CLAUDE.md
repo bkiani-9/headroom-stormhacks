@@ -8,6 +8,6 @@ Read decisions.md for the project decisions and PLAN.md for the build order.
 - numba isn't installed, so always call `runpp(net, numba=False)`.
 - One small step per prompt. After each change, run it if you can, or give me the exact command and what I should see.
 - Commit after each step that works.
-- I write `find_capacity` myself, so never write its logic.
+- `find_capacity` is done: I wrote step 1 and Claude wrote the rest at my request. The AI disclosure must say so.
 - No new libraries without asking.
 - The finished app must work offline: nothing loaded from the internet while it runs (no online map tiles, no scripts from a CDN).
