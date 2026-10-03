@@ -11,6 +11,14 @@ def load_grid():
     return pn.mv_oberrhein("generation")
 
 
+def add_project(net, bus, mw):
+    """Add a new generator (the project) of `mw` megawatts at `bus`.
+
+    Changes `net` in place. Load a fresh grid for each new project.
+    """
+    pp.create_sgen(net, bus, p_mw=mw, name="New project")
+
+
 def check_limits(net):
     """Solve the grid and check it against the voltage and loading limits.
 
