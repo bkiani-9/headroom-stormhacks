@@ -1,0 +1,91 @@
+"""Solve 20,000 random scenarios with the real power flow, using all cores.
+
+Each scenario: a random 20 kV bus, a random solar size (0-20 MW), and a
+random grid condition (load 10-60%, existing generation 0-80%, ranges
+from decisions.md). Run it from the project folder:
+
+    py -3.14 make_scenarios.py
+
+It writes results/scenarios.csv, one row per scenario.
+"""
+import os
+import warnings
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
+from engine import add_project, check, load_grid
+
+SCENARIO_FILE = Path(__file__).parent / "results" / "scenarios.csv"
+N_SCENARIOS = 20_000
+SEED = 7
+CHUNK = 250  # scenarios per job handed to a worker
+
+# Each worker process loads the grid once and reuses it.
+_net = None
+
+
+def _start_worker():
+    global _net
+    warnings.filterwarnings("ignore")  # pandapower's deprecation noise
+    _net = load_grid()
+
+
+def make_inputs(n=N_SCENARIOS, seed=SEED):
+    """The random scenarios (inputs only), from a fixed seed."""
+    rng = np.random.default_rng(seed)
+    buses = load_grid().bus.query("vn_kv == 20").index.to_numpy()
+    return pd.DataFrame({
+        "scenario": np.arange(n),
+        "bus": rng.choice(buses, n),
+        "solar_mw": rng.uniform(0, 20, n).round(2),
+        "load_level": rng.uniform(0.10, 0.60, n).round(3),
+        "gen_level": rng.uniform(0.0, 0.80, n).round(3),
+    })
+
+
+def solve_chunk(rows):
+    """Solve a list of scenarios in this worker; return result rows."""
+    out = []
+    for s in rows:
+        _net.load["scaling"] = s["load_level"]
+        _net.sgen["scaling"] = s["gen_level"]
+        result = check(add_project(_net, int(s["bus"]), s["solar_mw"]))
+        out.append({
+            **s,
+            "max_voltage_pu": result["max_voltage"],
+            "max_line_loading": result["max_line"],
+            "max_trafo_loading": result["max_trafo"],
+            "passes": result["passes"],
+            "problems": "; ".join(result["problems"]),
+        })
+    return out
+
+
+def main():
+    inputs = make_inputs().to_dict("records")
+    chunks = [inputs[i:i + CHUNK] for i in range(0, len(inputs), CHUNK)]
+    workers = os.cpu_count()
+    print(f"{len(inputs)} scenarios on {workers} processes.")
+
+    rows = []
+    with ProcessPoolExecutor(max_workers=workers, initializer=_start_worker) as pool:
+        for chunk_rows in tqdm(pool.map(solve_chunk, chunks), total=len(chunks),
+                               desc="Chunks", unit="chunk"):
+            rows.extend(chunk_rows)
+
+    # Write to a temporary file first, then swap it in.
+    SCENARIO_FILE.parent.mkdir(exist_ok=True)
+    temp_file = SCENARIO_FILE.with_suffix(".tmp")
+    pd.DataFrame(rows).to_csv(temp_file, index=False)
+    temp_file.replace(SCENARIO_FILE)
+    print(f"Saved {len(rows)} scenarios to {SCENARIO_FILE}.")
+
+
+# Needed on Windows: worker processes re-import this file, and this guard
+# stops each of them starting its own pool.
+if __name__ == "__main__":
+    main()

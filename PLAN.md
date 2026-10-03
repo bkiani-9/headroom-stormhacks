@@ -12,6 +12,17 @@ Hacking started 12:00 pm Saturday. Times are deadlines.
 
 ## ML design for step 5 (APPROVED)
 
+**Change (Saturday afternoon): training data replaced.** The training data
+is now 20,000 random scenarios from make_scenarios.py, saved in
+results/scenarios.csv. Each one is a random 20 kV bus, solar size
+(0-20 MW), load level (10-60%) and existing generation level (0-80%),
+solved once with the real power flow. It records the highest voltage,
+line loading and transformer loading, and pass or fail.
+The capacity-per-condition run below is paused at 4 of 44 conditions
+(results/capacity_scenarios.csv; rerun run_scenarios.py to resume).
+The model target and test plan below still describe the old data and
+need agreeing again for the new data.
+
 Goal: a model that predicts a bus's hosting capacity under any grid
 condition in milliseconds, so step 6 can sample hundreds of conditions per
 bus instead of running the solver hundreds of times.

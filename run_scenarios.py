@@ -5,7 +5,7 @@ Run it from the project folder:
 
     py -3.14 run_scenarios.py
 
-It writes results/scenarios.csv, one row per (condition, bus). Results are
+It writes results/capacity_scenarios.csv, one row per (condition, bus). Results are
 saved after each condition, and conditions already in the file are skipped,
 so if it stops, run it again to carry on.
 """
@@ -20,7 +20,7 @@ from tqdm import tqdm
 from capacity import find_capacity
 from engine import load_grid
 
-SCENARIO_FILE = Path(__file__).parent / "results" / "scenarios.csv"
+SCENARIO_FILE = Path(__file__).parent / "results" / "capacity_scenarios.csv"
 
 # Ranges from decisions.md, as fractions of rated size.
 LOAD_RANGE = (0.10, 0.60)
