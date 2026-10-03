@@ -39,8 +39,12 @@ def bus_xy(net, bus):
     return x, y
 
 
-def network_figure(net):
-    """Build the figure from a solved `net`."""
+def network_figure(net, selected_bus=None):
+    """Build the figure from a solved `net`, with a ring around `selected_bus`.
+
+    Bus and substation points carry their bus index as `customdata`, so a
+    click on the chart tells the app which bus was picked.
+    """
     fig = go.Figure()
 
     # Lines: one trace each, so each can have its own colour.
@@ -69,6 +73,8 @@ def network_figure(net):
         fig.add_trace(go.Scatter(
             x=[mx], y=[my], mode="markers",
             marker=dict(size=12, opacity=0),
+            selected=dict(marker=dict(opacity=0)),
+            unselected=dict(marker=dict(opacity=0)),
             hoverinfo="text", text=[hover], showlegend=False,
         ))
 
@@ -95,11 +101,12 @@ def network_figure(net):
                 ticktext=["0", "50", "100 (limit)"],
             ),
         ),
-        hoverinfo="text", text=bus_hover, showlegend=False,
+        hoverinfo="text", text=bus_hover, customdata=list(buses),
+        showlegend=False,
     ))
 
     # Substations: larger squares at the 110/20 kV transformers.
-    subs_x, subs_y, subs_colour, subs_hover = [], [], [], []
+    subs_x, subs_y, subs_colour, subs_hover, subs_bus = [], [], [], [], []
     for trafo in net.trafo.index:
         lv_bus = net.trafo.lv_bus[trafo]
         hv_bus = net.trafo.hv_bus[trafo]
@@ -107,6 +114,7 @@ def network_figure(net):
         loading = net.res_trafo.loading_percent[trafo]
         subs_x.append(x)
         subs_y.append(y)
+        subs_bus.append(int(lv_bus))  # clicking a substation picks its 20 kV bus
         subs_colour.append(loading_used(loading))
         subs_hover.append(
             f"<b>{net.trafo.name[trafo]}</b> (110/20 kV substation)<br>"
@@ -123,8 +131,27 @@ def network_figure(net):
             color=subs_colour, colorscale=COLORSCALE, cmin=0, cmax=100,
             line=dict(color="#0b0b0b", width=2),
         ),
-        hoverinfo="text", text=subs_hover, showlegend=False,
+        hoverinfo="text", text=subs_hover, customdata=subs_bus,
+        showlegend=False,
     ))
+
+    # Ring around the selected bus, drawn on top of everything.
+    if selected_bus is not None:
+        x, y = bus_xy(net, selected_bus)
+        fig.add_trace(go.Scatter(
+            x=[x], y=[y], mode="markers",
+            marker=dict(symbol="circle-open", size=22,
+                        line=dict(color="#0b0b0b", width=3)),
+            hoverinfo="skip", customdata=[int(selected_bus)],
+            showlegend=False,
+        ))
+
+    # Clicking selects a point; keep every other point at full colour
+    # instead of letting Plotly fade them.
+    fig.update_traces(
+        unselected=dict(marker=dict(opacity=1)),
+        selector=lambda trace: trace.customdata is not None,
+    )
 
     # Plain background, no axes. Stretch y so the grid keeps its real shape
     # (a degree of longitude is shorter than a degree of latitude here).
