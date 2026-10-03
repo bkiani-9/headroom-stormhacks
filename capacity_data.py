@@ -19,12 +19,19 @@ from pathlib import Path
 import pandas as pd
 
 CAPACITY_FILE = Path(__file__).parent / "results" / "capacity.csv"
+HEADLINE_MW = 2.0  # headline project size, from decisions.md
 
 
 def read_capacity(path=CAPACITY_FILE):
     """Read the capacity file into a table indexed by bus."""
     table = pd.read_csv(path, dtype={"limit": str}, keep_default_na=False)
     return table.set_index("bus")[["capacity_mw", "limit"]]
+
+
+def count_can_take(table, mw):
+    """How many buses in `table` have a capacity of at least `mw`."""
+    # A tiny tolerance, so a capacity saved as 2.0 counts for a 2 MW project.
+    return int((table.capacity_mw >= mw - 1e-9).sum())
 
 
 def placeholder_capacity(buses):

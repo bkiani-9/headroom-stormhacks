@@ -1,7 +1,8 @@
 import streamlit as st
 
 from capacity import MAX_SEARCH_MW
-from capacity_data import CAPACITY_FILE, placeholder_capacity, read_capacity
+from capacity_data import (CAPACITY_FILE, HEADLINE_MW, count_can_take,
+                           placeholder_capacity, read_capacity)
 from engine import (MAX_VOLTAGE_PU, add_project, check, farthest_bus,
                     load_grid, solve)
 from network_plot import capacity_figure, network_figure, voltage_used
@@ -170,9 +171,39 @@ def show_project_view():
               f"{shown['max_trafo']:.1f}%")
 
 
-def show_capacity_view():
+def saved_capacity():
+    """The saved results as (table, error). Table is None if there's no file."""
+    if not CAPACITY_FILE.exists():
+        return None, None
+    try:
+        return capacity_from_file(CAPACITY_FILE.stat().st_mtime), None
+    except (KeyError, ValueError) as error:
+        return None, (
+            f"Could not read `results/capacity.csv` ({error}). It needs "
+            "the columns `bus`, `capacity_mw` and `limit`."
+        )
+
+
+def show_headline(saved):
+    """How many buses can take the headline project, from the saved results."""
+    if saved is None:
+        st.info(
+            f"The headline (how many buses can take a {HEADLINE_MW:g} MW "
+            "project) appears once `results/capacity.csv` exists."
+        )
+        return
+    st.metric(
+        f"Buses that can take a {HEADLINE_MW:g} MW solar project",
+        f"{count_can_take(saved, HEADLINE_MW)} of {len(saved)}",
+    )
+
+
+def show_capacity_view(saved, error):
     """How much solar each bus can take, read from results/capacity.csv."""
-    placeholder = not CAPACITY_FILE.exists()
+    if error:
+        st.error(error)
+        return
+    placeholder = saved is None
     if placeholder:
         capacity = fake_capacity(tuple(mv_buses))
         st.warning(
@@ -181,14 +212,7 @@ def show_capacity_view():
             "`results/capacity.csv` exists."
         )
     else:
-        try:
-            capacity = capacity_from_file(CAPACITY_FILE.stat().st_mtime)
-        except (KeyError, ValueError) as error:
-            st.error(
-                f"Could not read `results/capacity.csv` ({error}). It needs "
-                "the columns `bus`, `capacity_mw` and `limit`."
-            )
-            return
+        capacity = saved
 
     with st.sidebar:
         st.header("Capacity at a bus")
@@ -218,8 +242,11 @@ def show_capacity_view():
     )
 
 
+saved, capacity_error = saved_capacity()
+show_headline(saved)
+
 page = st.radio("View", ["Project check", "Capacity"], horizontal=True, key="page")
 if page == "Capacity":
-    show_capacity_view()
+    show_capacity_view(saved, capacity_error)
 else:
     show_project_view()
