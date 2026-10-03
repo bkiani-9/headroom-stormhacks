@@ -1,14 +1,15 @@
-"""Build the ML model's inputs (features) for every (condition, bus).
+"""Build fixed facts about each 20 kV bus, used as ML model inputs.
 
 Run it from the project folder:
 
     py -3.14 build_features.py
 
-It writes results/features.csv, one row per (condition, bus), matching the
-rows of results/scenarios.csv. It never runs the capacity search: only one
-ordinary power flow per condition (see PLAN.md, ML design).
+It writes results/bus_features.csv, one row per bus. The model combines a
+bus's row with a scenario's solar size, load level and generation level.
+Nothing here needs a power flow per scenario, so the model stays fast.
 """
 import copy
+import math
 from pathlib import Path
 
 import networkx as nx
@@ -16,14 +17,14 @@ import pandas as pd
 import pandapower.shortcircuit as sc
 import pandapower.topology as top
 
-from engine import load_grid, solve
-from run_scenarios import grid_at, make_conditions
+from engine import load_grid
 
-FEATURE_FILE = Path(__file__).parent / "results" / "features.csv"
+BUS_FEATURE_FILE = Path(__file__).parent / "results" / "bus_features.csv"
+VN_KV = 20.0
 
 
 def bus_paths(net):
-    """Fixed facts about each 20 kV bus: its path back to its substation.
+    """Each 20 kV bus's path back to its substation.
 
     Returns {bus: dict} with the substation number (0 or 1), the feeder (the
     first bus out of the substation on the way to this bus), the lines on
@@ -32,7 +33,7 @@ def bus_paths(net):
     graph = top.create_nxgraph(net, calc_branch_impedances=True)
     substations = list(net.trafo.lv_bus)
     facts = {}
-    for bus in net.bus.index[net.bus.vn_kv == 20]:
+    for bus in net.bus.index[net.bus.vn_kv == VN_KV]:
         # The grid is in two separate halves: find the substation that feeds this bus.
         sub_number, sub_bus = next(
             (i, s) for i, s in enumerate(substations) if nx.has_path(graph, s, bus)
@@ -55,9 +56,9 @@ def bus_paths(net):
             "substation": sub_number,
             "feeder": int(path[1]) if len(path) > 1 else int(bus),
             "path_lines": lines,
-            "r_ohm": round(r, 4),
-            "x_ohm": round(x, 4),
-            "km": round(km, 3),
+            "r_ohm": r,
+            "x_ohm": x,
+            "km": km,
         }
     return facts
 
@@ -78,51 +79,46 @@ def equivalent_impedance(net):
     return sc_net.res_bus_sc[["rk_ohm", "xk_ohm"]]
 
 
-def features_for(condition, facts):
-    """One row per bus for one condition, from one ordinary power flow."""
-    net = grid_at(condition)
-    solve(net)
-    vm = net.res_bus.vm_pu
-    loading = net.res_line.loading_percent
-
-    feeder_max_vm = {}
-    for bus, f in facts.items():
-        feeder_max_vm[f["feeder"]] = max(feeder_max_vm.get(f["feeder"], 0), vm[bus])
+def bus_features(net):
+    """One row of fixed facts per 20 kV bus."""
+    facts = bus_paths(net)
+    impedance = equivalent_impedance(net)
+    # A line's rating in MVA at 20 kV: sqrt(3) x voltage x current limit.
+    rating_mva = math.sqrt(3) * VN_KV * net.line.max_i_ka
 
     rows = []
     for bus, f in facts.items():
+        path_ratings = rating_mva[f["path_lines"]]
         rows.append({
-            "condition": condition["condition"],
             "bus": bus,
-            "load_level": condition["load_level"],
-            "gen_level": condition["gen_level"],
             "substation": f["substation"],
-            "r_ohm": f["r_ohm"],
-            "x_ohm": f["x_ohm"],
-            "km": f["km"],
-            "rk_ohm": f["rk_ohm"],
-            "xk_ohm": f["xk_ohm"],
-            "bus_vm_pu": round(vm[bus], 5),
-            "feeder_max_vm_pu": round(feeder_max_vm[f["feeder"]], 5),
-            "path_max_loading": round(max(loading[f["path_lines"]]), 2)
-                                if f["path_lines"] else 0.0,
+            "feeder": f["feeder"],
+            "r_ohm": round(f["r_ohm"], 4),
+            "x_ohm": round(f["x_ohm"], 4),
+            "km": round(f["km"], 3),
+            "rk_ohm": round(impedance.rk_ohm[bus], 4),
+            "xk_ohm": round(impedance.xk_ohm[bus], 4),
+            "n_lines": len(f["path_lines"]),
+            # The weakest line between the bus and its substation; a bus at
+            # the substation has no lines, so use the strongest line size.
+            "path_min_rating_mva": round(path_ratings.min() if len(path_ratings)
+                                         else rating_mva.max(), 2),
         })
-    return rows
+    table = pd.DataFrame(rows).set_index("bus")
+
+    # Rated existing generation and load per feeder (MW), so the model
+    # knows what else shares the feeder.
+    for column, element in [("feeder_sgen_mw", net.sgen), ("feeder_load_mw", net.load)]:
+        per_feeder = element.p_mw.groupby(element.bus.map(table.feeder)).sum()
+        table[column] = table.feeder.map(per_feeder).fillna(0).round(2)
+    return table
 
 
 def main():
-    net = load_grid()
-    facts = bus_paths(net)
-    impedance = equivalent_impedance(net)
-    for bus, f in facts.items():
-        f["rk_ohm"] = round(impedance.rk_ohm[bus], 4)
-        f["xk_ohm"] = round(impedance.xk_ohm[bus], 4)
-    rows = []
-    for condition in make_conditions():
-        rows.extend(features_for(condition, facts))
-    FEATURE_FILE.parent.mkdir(exist_ok=True)
-    pd.DataFrame(rows).to_csv(FEATURE_FILE, index=False)
-    print(f"Saved {len(rows)} rows to {FEATURE_FILE}.")
+    table = bus_features(load_grid())
+    BUS_FEATURE_FILE.parent.mkdir(exist_ok=True)
+    table.to_csv(BUS_FEATURE_FILE)
+    print(f"Saved {len(table)} buses to {BUS_FEATURE_FILE}.")
 
 
 if __name__ == "__main__":

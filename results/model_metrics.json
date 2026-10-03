@@ -1,0 +1,39 @@
+{
+  "train_scenarios": 32000,
+  "test_scenarios": 8000,
+  "errors": {
+    "max_voltage_pu": {
+      "mean_abs_error": 0.0009129655805615573,
+      "p95_abs_error": 0.0025335099163459524,
+      "max_abs_error": 0.016976854187517265
+    },
+    "max_line_loading": {
+      "mean_abs_error": 1.0306596623751998,
+      "p95_abs_error": 3.050152724015659,
+      "max_abs_error": 13.467028983336945
+    },
+    "max_trafo_loading": {
+      "mean_abs_error": 0.859639367945193,
+      "p95_abs_error": 2.2434365872610242,
+      "max_abs_error": 10.45321291727376
+    }
+  },
+  "pass_fail_model": {
+    "accuracy": 0.980625,
+    "false_pass_rate": 0.01,
+    "false_fail_rate": 0.009375
+  },
+  "pass_fail_baseline": {
+    "accuracy": 0.641375,
+    "false_pass_rate": 0.000125,
+    "false_fail_rate": 0.3585
+  },
+  "capacity": {
+    "cases": 708,
+    "conditions": 4,
+    "mean_abs_error_mw": 0.28262711864406775,
+    "max_abs_error_mw": 2.1999999999999993,
+    "share_within_0_5_mw": 0.8531073446327684,
+    "share_over_by_more_than_0_5_mw": 0.05508474576271186
+  }
+}

@@ -7,8 +7,23 @@ from decisions.md). Run it from the project folder:
     py -3.14 make_scenarios.py
 
 It writes results/scenarios.csv, one row per scenario.
+
+    py -3.14 make_scenarios.py --near-boundary
+
+makes a second set, results/scenarios_boundary.csv: random buses and
+conditions again, but with solar sizes within 2 MW of where the current
+model thinks the capacity is, so training sees many cases close to the
+pass/fail line. The real power flow still decides every result.
+
+    py -3.14 make_scenarios.py --edges
+
+makes a third set, results/scenarios_edges.csv: like --near-boundary, but
+with load and generation levels drawn more often near the ends of their
+ranges, where uniform sampling leaves few examples (e.g. the low-load,
+high-generation "generation" case the app shows).
 """
 import os
+import sys
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -20,8 +35,13 @@ from tqdm import tqdm
 from engine import add_project, check, load_grid
 
 SCENARIO_FILE = Path(__file__).parent / "results" / "scenarios.csv"
+BOUNDARY_FILE = Path(__file__).parent / "results" / "scenarios_boundary.csv"
+EDGE_FILE = Path(__file__).parent / "results" / "scenarios_edges.csv"
 N_SCENARIOS = 20_000
 SEED = 7
+BOUNDARY_SEED = 8
+EDGE_SEED = 9
+BOUNDARY_SPREAD_MW = 2.0
 CHUNK = 250  # scenarios per job handed to a worker
 
 # Each worker process loads the grid once and reuses it.
@@ -47,6 +67,26 @@ def make_inputs(n=N_SCENARIOS, seed=SEED):
     })
 
 
+def make_boundary_inputs(n=N_SCENARIOS, seed=BOUNDARY_SEED, edges=False):
+    """Random buses and conditions, with sizes near the model's capacity.
+
+    With `edges`, load and generation levels follow a Beta(0.5, 0.5)
+    shape over their ranges: still anywhere in the range, but more often
+    near its ends.
+    """
+    import ml  # only needed here, after a first model exists
+
+    inputs = make_inputs(n, seed)
+    rng = np.random.default_rng(seed + 1)
+    if edges:
+        inputs["load_level"] = (0.10 + 0.50 * rng.beta(0.5, 0.5, n)).round(3)
+        inputs["gen_level"] = (0.80 * rng.beta(0.5, 0.5, n)).round(3)
+    capacity = ml.model_capacity(ml.load_model(), ml.read_bus_features(), inputs)
+    nudge = rng.uniform(-BOUNDARY_SPREAD_MW, BOUNDARY_SPREAD_MW, n)
+    inputs["solar_mw"] = np.clip(capacity + nudge, 0, 20).round(2)
+    return inputs
+
+
 def solve_chunk(rows):
     """Solve a list of scenarios in this worker; return result rows."""
     out = []
@@ -66,7 +106,13 @@ def solve_chunk(rows):
 
 
 def main():
-    inputs = make_inputs().to_dict("records")
+    if "--edges" in sys.argv:
+        out_file, inputs = EDGE_FILE, make_boundary_inputs(seed=EDGE_SEED, edges=True)
+    elif "--near-boundary" in sys.argv:
+        out_file, inputs = BOUNDARY_FILE, make_boundary_inputs()
+    else:
+        out_file, inputs = SCENARIO_FILE, make_inputs()
+    inputs = inputs.to_dict("records")
     chunks = [inputs[i:i + CHUNK] for i in range(0, len(inputs), CHUNK)]
     workers = os.cpu_count()
     print(f"{len(inputs)} scenarios on {workers} processes.")
@@ -78,11 +124,11 @@ def main():
             rows.extend(chunk_rows)
 
     # Write to a temporary file first, then swap it in.
-    SCENARIO_FILE.parent.mkdir(exist_ok=True)
-    temp_file = SCENARIO_FILE.with_suffix(".tmp")
+    out_file.parent.mkdir(exist_ok=True)
+    temp_file = out_file.with_suffix(".tmp")
     pd.DataFrame(rows).to_csv(temp_file, index=False)
-    temp_file.replace(SCENARIO_FILE)
-    print(f"Saved {len(rows)} scenarios to {SCENARIO_FILE}.")
+    temp_file.replace(out_file)
+    print(f"Saved {len(rows)} scenarios to {out_file}.")
 
 
 # Needed on Windows: worker processes re-import this file, and this guard

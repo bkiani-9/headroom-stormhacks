@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Trained model: rebuilt in about a minute with `py -3.14 train_model.py`
+models/*.joblib
+
+# Half-written files from interrupted runs
+results/*.tmp
+
 # Virtual environments
 .venv/
 venv/

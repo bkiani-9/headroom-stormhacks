@@ -1,5 +1,9 @@
+import json
+
+import pandas as pd
 import streamlit as st
 
+import ml
 from capacity import MAX_SEARCH_MW
 from capacity_data import (CAPACITY_FILE, HEADLINE_MW, count_can_take,
                            placeholder_capacity, read_capacity)
@@ -42,6 +46,23 @@ def capacity_from_file(last_changed):
 @st.cache_data
 def fake_capacity(buses):
     return placeholder_capacity(buses)
+
+
+# The trained model, re-loaded when the model file changes.
+@st.cache_resource
+def trained_model(last_changed):
+    return ml.load_model(), ml.read_bus_features()
+
+
+def model_or_none():
+    if not ml.MODEL_FILE.exists():
+        return None
+    return trained_model(ml.MODEL_FILE.stat().st_mtime)
+
+
+# The grid the app shows is pandapower's "generation" case.
+APP_LOAD_LEVEL = 0.1
+APP_GEN_LEVEL = 0.8
 
 
 def clicked_bus(map_state):
@@ -111,6 +132,21 @@ def show_project_view():
             st.error(f"Fail: {mw:g} MW here breaks a limit:")
             for problem in result["problems"]:
                 st.write(f"- {problem}")
+
+        model = model_or_none()
+        if model is not None:
+            models, bus_features = model
+            case = pd.DataFrame([{"bus": selected, "solar_mw": mw,
+                                  "load_level": APP_LOAD_LEVEL,
+                                  "gen_level": APP_GEN_LEVEL}])
+            guess = ml.predict(models, ml.add_features(case, bus_features))
+            verdict = "pass" if ml.passes(guess).iloc[0] else "fail"
+            st.caption(
+                f"ML model's instant guess, no power flow: **{verdict}** "
+                f"(highest voltage {guess.max_voltage_pu.iloc[0]:.4f} pu, "
+                f"busiest line {guess.max_line_loading.iloc[0]:.0f}%). "
+                "The solver result above is the one that counts."
+            )
 
         today_vm = net.res_bus.vm_pu[selected]
         if solved:
@@ -245,8 +281,37 @@ def show_capacity_view(saved, error):
 saved, capacity_error = saved_capacity()
 show_headline(saved)
 
-page = st.radio("View", ["Project check", "Capacity"], horizontal=True, key="page")
+def show_model_view():
+    """How well the ML model matches the real solver."""
+    st.subheader("How good is the ML model?")
+    metrics_file = ml.ROOT / "results" / "model_metrics.json"
+    plot_file = ml.ROOT / "results" / "model_vs_solver.png"
+    if not metrics_file.exists():
+        st.info("No trained model yet: run `py -3.14 train_model.py`.")
+        return
+    m = json.loads(metrics_file.read_text())
+    pf, cap = m["pass_fail_model"], m["capacity"]
+    st.caption(
+        f"Trained on {m['train_scenarios']:,} scenarios solved with the real "
+        f"power flow, tested on {m['test_scenarios']:,} it never saw. The model "
+        "needs no power flow, so it answers in milliseconds."
+    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pass/fail agrees with solver", f"{pf['accuracy']:.1%}")
+    c2.metric("Says pass when it fails", f"{pf['false_pass_rate']:.1%}")
+    c3.metric("Capacity within 0.5 MW", f"{cap['share_within_0_5_mw']:.0%}")
+    if plot_file.exists():
+        st.image(str(plot_file))
+    report = ml.ROOT / "results" / "model_report.md"
+    if report.exists():
+        with st.expander("Full error report"):
+            st.markdown(report.read_text(encoding="utf-8"))
+
+
+page = st.radio("View", ["Project check", "Capacity", "Model"], horizontal=True, key="page")
 if page == "Capacity":
     show_capacity_view(saved, capacity_error)
+elif page == "Model":
+    show_model_view()
 else:
     show_project_view()
