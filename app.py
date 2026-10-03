@@ -20,6 +20,15 @@ def far_bus():
     return farthest_bus(solved_grid())
 
 
+# Remember each (bus, size) already solved, so dragging back is instant.
+@st.cache_resource(max_entries=300)
+def with_solar(bus, mw):
+    """The grid with `mw` of solar at `bus`, solved, and its check result."""
+    project_net = add_project(solved_grid(), bus, mw)
+    result = check(project_net)
+    return project_net, result
+
+
 def clicked_bus(map_state):
     """The bus index of the clicked point on the map, or None."""
     if not map_state:
@@ -52,40 +61,6 @@ if click is not None and click != st.session_state.get("last_click") and click i
 st.session_state.last_click = click
 selected = st.session_state.bus
 
-with st.sidebar:
-    st.header("Selected bus")
-    st.subheader(f"{net.bus.name[selected]} (bus {selected})")
-    if selected == farthest:
-        st.caption("Farthest bus from a substation")
-    selected_vm = net.res_bus.vm_pu[selected]
-    st.metric("Voltage (per unit)", f"{selected_vm:.4f}")
-    st.caption(
-        f"Limit {MAX_VOLTAGE_PU} pu. "
-        f"{max(voltage_used(selected_vm), 0):.0f}% of the voltage room is used."
-    )
-    st.caption("Click a bus on the map to select it.")
-
-st.metric("Highest bus voltage (per unit)", f"{max_voltage:.4f}")
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Buses", len(net.bus))
-col2.metric("Lines", len(net.line))
-col3.metric("Transformers", len(net.trafo))
-
-st.subheader("The grid today")
-st.caption(
-    "Buses are coloured by voltage, lines by loading, substations (squares) "
-    "by transformer loading, all on one scale: green is well within the "
-    "limit, red is at or past it. Hover for details, click a bus to select it."
-)
-st.plotly_chart(
-    network_figure(net, selected),
-    key=MAP_KEY, on_select="rerun", selection_mode="points",
-)
-
-st.subheader("Check a new project")
-
-
 def bus_label(bus):
     label = f"{net.bus.name[bus]} (bus {bus})"
     if bus == farthest:
@@ -93,23 +68,65 @@ def bus_label(bus):
     return label
 
 
-bus = st.selectbox("Bus", mv_buses, key="bus", format_func=bus_label)
-mw = st.number_input("Project size (MW)", min_value=0.0, value=2.0, step=0.1)
+with st.sidebar:
+    st.header("New solar project")
+    st.selectbox("Bus", mv_buses, key="bus", format_func=bus_label)
+    st.caption("Or click a bus on the map.")
+    mw = st.slider("Solar size (MW)", 0.0, 20.0, 0.0, 0.1, key="mw")
+    mw = round(mw, 1)  # 0.1 steps can arrive as 2.3000000000000003
 
-if st.button("Check"):
-    result = check(add_project(net, bus, mw))
+project_net, result = with_solar(selected, mw)
+solved = result["max_voltage"] is not None
+# If the grid with the project doesn't solve, there are no new results to
+# draw, so the map falls back to today's grid.
+map_net = project_net if solved else net
 
+with st.sidebar:
     if result["passes"]:
-        st.success(f"Pass: {mw:g} MW at bus {bus} stays within every limit.")
+        st.success(f"Pass: {mw:g} MW here stays within every limit.")
     else:
-        st.error(f"Fail: {mw:g} MW at bus {bus}. What went wrong:")
+        st.error(f"Fail: {mw:g} MW here breaks a limit:")
         for problem in result["problems"]:
             st.write(f"- {problem}")
 
-    if result["max_voltage"] is not None:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Highest voltage (pu)", f"{result['max_voltage']:.4f}")
-        c2.metric(f"Busiest line: {result['worst_line_name']}",
-                  f"{result['max_line']:.1f}%")
-        c3.metric(f"Busiest transformer: {result['worst_trafo_name']}",
-                  f"{result['max_trafo']:.1f}%")
+    today_vm = net.res_bus.vm_pu[selected]
+    if solved:
+        new_vm = project_net.res_bus.vm_pu[selected]
+        st.metric("Voltage at this bus (per unit)", f"{new_vm:.4f}",
+                  delta=f"{new_vm - today_vm:+.4f} from today",
+                  delta_color="off")
+        st.caption(
+            f"Limit {MAX_VOLTAGE_PU} pu. "
+            f"{max(voltage_used(new_vm), 0):.0f}% of the voltage room is used."
+        )
+
+st.metric("Highest bus voltage today (per unit)", f"{max_voltage:.4f}")
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Buses", len(net.bus))
+col2.metric("Lines", len(net.line))
+col3.metric("Transformers", len(net.trafo))
+
+if mw == 0:
+    st.subheader("The grid today")
+elif solved:
+    st.subheader(f"The grid with {mw:g} MW of solar at {bus_label(selected)}")
+else:
+    st.subheader("The grid today (with the project it does not solve)")
+st.caption(
+    "Buses are coloured by voltage, lines by loading, substations (squares) "
+    "by transformer loading, all on one scale: green is well within the "
+    "limit, red is at or past it. Hover for details, click a bus to select it."
+)
+st.plotly_chart(
+    network_figure(map_net, selected),
+    key=MAP_KEY, on_select="rerun", selection_mode="points",
+)
+
+if solved:
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Highest voltage (pu)", f"{result['max_voltage']:.4f}")
+    c2.metric(f"Busiest line: {result['worst_line_name']}",
+              f"{result['max_line']:.1f}%")
+    c3.metric(f"Busiest transformer: {result['worst_trafo_name']}",
+              f"{result['max_trafo']:.1f}%")
