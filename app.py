@@ -77,9 +77,7 @@ with st.sidebar:
 
 project_net, result = with_solar(selected, mw)
 solved = result["max_voltage"] is not None
-# If the grid with the project doesn't solve, there are no new results to
-# draw, so the map falls back to today's grid.
-map_net = project_net if solved else net
+_, today_result = with_solar(selected, 0.0)
 
 with st.sidebar:
     if result["passes"]:
@@ -107,12 +105,29 @@ col1.metric("Buses", len(net.bus))
 col2.metric("Lines", len(net.line))
 col3.metric("Transformers", len(net.trafo))
 
+view = st.radio(
+    "Map shows", ["After: with the new solar", "Before: without it"],
+    horizontal=True, key="view",
+)
+show_after = view.startswith("After")
+
+# Pick which grid to draw. If the grid with the project doesn't solve,
+# there are no new results to draw, so the map falls back to today's grid.
 if mw == 0:
     st.subheader("The grid today")
+    st.caption("Move the solar slider to see a before and after.")
+    map_net, shown = net, today_result
+elif not show_after:
+    st.subheader(f"Before: the grid without the {mw:g} MW of solar")
+    map_net, shown = net, today_result
 elif solved:
-    st.subheader(f"The grid with {mw:g} MW of solar at {bus_label(selected)}")
+    st.subheader(f"After: the grid with {mw:g} MW of solar at {bus_label(selected)}")
+    map_net, shown = project_net, result
 else:
-    st.subheader("The grid today (with the project it does not solve)")
+    st.subheader("After: the grid does not solve with this project")
+    st.caption("Showing today's grid instead.")
+    map_net, shown = net, today_result
+
 st.caption(
     "Buses are coloured by voltage, lines by loading, substations (squares) "
     "by transformer loading, all on one scale: green is well within the "
@@ -123,10 +138,9 @@ st.plotly_chart(
     key=MAP_KEY, on_select="rerun", selection_mode="points",
 )
 
-if solved:
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Highest voltage (pu)", f"{result['max_voltage']:.4f}")
-    c2.metric(f"Busiest line: {result['worst_line_name']}",
-              f"{result['max_line']:.1f}%")
-    c3.metric(f"Busiest transformer: {result['worst_trafo_name']}",
-              f"{result['max_trafo']:.1f}%")
+c1, c2, c3 = st.columns(3)
+c1.metric("Highest voltage (pu)", f"{shown['max_voltage']:.4f}")
+c2.metric(f"Busiest line: {shown['worst_line_name']}",
+          f"{shown['max_line']:.1f}%")
+c3.metric(f"Busiest transformer: {shown['worst_trafo_name']}",
+          f"{shown['max_trafo']:.1f}%")
