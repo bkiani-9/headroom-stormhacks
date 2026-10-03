@@ -1,6 +1,7 @@
 import streamlit as st
 
 from engine import add_project, check, farthest_bus, load_grid, solve
+from network_plot import network_figure
 
 
 # Load and solve the grid once, then reuse it when the page reruns.
@@ -27,6 +28,14 @@ col1, col2, col3 = st.columns(3)
 col1.metric("Buses", len(net.bus))
 col2.metric("Lines", len(net.line))
 col3.metric("Transformers", len(net.trafo))
+
+st.subheader("The grid today")
+st.caption(
+    "Buses are coloured by voltage, lines by loading, substations (squares) "
+    "by transformer loading, all on one scale: green is well within the "
+    "limit, red is at or past it. Hover for details."
+)
+st.plotly_chart(network_figure(net))
 
 st.subheader("Check a new project")
 
