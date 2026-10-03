@@ -18,3 +18,5 @@
 
 &#x20;  - Capacity search precision: 0.1 MW
 
+&#x20;  - Short-circuit assumptions (the network lacks this data; used only on a copy, to compute each bus's equivalent impedance rk/xk as an ML feature): substation grid connection s\_sc\_max\_mva = 1000 MVA and rx\_max = 0.1; existing generators k = 1.2; maximum case
+
