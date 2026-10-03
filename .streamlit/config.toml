@@ -1,0 +1,3 @@
+[browser]
+# Keep the app offline: don't send usage statistics.
+gatherUsageStats = false
