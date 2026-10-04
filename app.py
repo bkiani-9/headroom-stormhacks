@@ -318,37 +318,43 @@ saved95 = (capacity95_from_file(CAPACITY95_FILE.stat().st_mtime)
            if CAPACITY95_FILE.exists() else None)
 show_headline(saved)
 
-def show_model_view():
-    """How well the ML model matches the real solver."""
-    st.subheader("How good is the ML model?")
+def show_proof_view():
+    """Proof that the ML model matches the real solver: one sentence and
+    the model-versus-solver plot, both read from files train_model.py saved."""
+    st.subheader("Proof: the ML model against the real power flow")
     metrics_file = ml.ROOT / "results" / "model_metrics.json"
     plot_file = ml.ROOT / "results" / "model_vs_solver.png"
-    if not metrics_file.exists():
-        st.info("No trained model yet: run `py -3.14 train_model.py`.")
+    if not metrics_file.exists() or not plot_file.exists():
+        st.info("No test results yet: run `py -3.14 train_model.py`.")
         return
     m = json.loads(metrics_file.read_text())
-    pf, cap = m["pass_fail_model"], m["capacity"]
-    st.caption(
-        f"Trained on {m['train_scenarios']:,} scenarios solved with the real "
-        f"power flow, tested on {m['test_scenarios']:,} it never saw. The model "
-        "needs no power flow, so it answers in milliseconds."
+    pf = m["pass_fail_model"]
+    st.markdown(
+        f"On **{m['test_scenarios']:,} test scenarios it never saw**, the model "
+        f"agreed with the real power flow **{pf['accuracy']:.1%}** of the time: "
+        f"it said pass when the solver said fail in **{pf['false_pass_rate']:.1%}**, "
+        f"and fail when the solver said pass in **{pf['false_fail_rate']:.1%}**."
     )
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Pass/fail agrees with solver", f"{pf['accuracy']:.1%}")
-    c2.metric("Says pass when it fails", f"{pf['false_pass_rate']:.1%}")
-    c3.metric("Capacity within 0.5 MW", f"{cap['share_within_0_5_mw']:.0%}")
-    if plot_file.exists():
-        st.image(str(plot_file))
-    report = ml.ROOT / "results" / "model_report.md"
-    if report.exists():
-        with st.expander("Full error report"):
+    st.image(str(plot_file),
+             caption="Each dot is a test scenario: solver value across, model "
+                     "value up. On the dashed line the model is exactly right.")
+
+    cap = m["capacity"]
+    with st.expander("More detail"):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pass/fail agrees, close to a limit",
+                  f"{m['pass_fail_near_limit']['accuracy']:.1%}")
+        c2.metric("Capacity within 0.5 MW of the search", f"{cap['share_within_0_5_mw']:.0%}")
+        c3.metric("Trained on", f"{m['train_scenarios']:,} scenarios")
+        report = ml.ROOT / "results" / "model_report.md"
+        if report.exists():
             st.markdown(report.read_text(encoding="utf-8"))
 
 
-page = st.radio("View", ["Project check", "Capacity", "Model"], horizontal=True, key="page")
+page = st.radio("View", ["Project check", "Capacity", "Proof"], horizontal=True, key="page")
 if page == "Capacity":
     show_capacity_view(saved, capacity_error)
-elif page == "Model":
-    show_model_view()
+elif page == "Proof":
+    show_proof_view()
 else:
     show_project_view()
