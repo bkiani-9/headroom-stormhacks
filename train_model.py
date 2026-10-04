@@ -41,8 +41,9 @@ NEAR_LIMIT = {
     "max_trafo_loading": (MAX_LOADING_PERCENT - 10, MAX_LOADING_PERCENT + 10),
 }
 
-# Chart colours (one series, so one hue; references stay muted grey).
-DOT = "#2a78d6"
+# Chart colours: neutral dark dots, so the app keeps one colour scale (the
+# red-to-green "room left"); references stay muted grey.
+DOT = "#33322f"
 REFERENCE = "#898781"
 INK = "#52514e"
 
@@ -229,10 +230,11 @@ def plot(y_test, predicted, cap_true, cap_model):
     panels = [
         ("Highest voltage (pu)", y_test.max_voltage_pu, predicted.max_voltage_pu, MAX_VOLTAGE_PU),
         ("Busiest line loading (%)", y_test.max_line_loading, predicted.max_line_loading, MAX_LOADING_PERCENT),
-        ("Busiest transformer loading (%)", y_test.max_trafo_loading, predicted.max_trafo_loading, MAX_LOADING_PERCENT),
-        ("Capacity (MW), 177 buses x 4 corner conditions", cap_true, cap_model, None),
+        ("Busiest transformer (%)", y_test.max_trafo_loading, predicted.max_trafo_loading, MAX_LOADING_PERCENT),
+        ("Capacity (MW)", cap_true, cap_model, None),
     ]
-    fig, axes = plt.subplots(2, 2, figsize=(10, 9))
+    # Large text: the plot is shown on a projector and read from a metre away.
+    fig, axes = plt.subplots(2, 2, figsize=(13, 11))
     for ax, (title, truth, guess, limit) in zip(axes.flat, panels):
         low = min(truth.min(), guess.min())
         high = max(truth.max(), guess.max())
@@ -246,19 +248,19 @@ def plot(y_test, predicted, cap_true, cap_model):
             ax.axvline(limit, color=REFERENCE, linewidth=1, linestyle=":", zorder=1)
             ax.axhline(limit, color=REFERENCE, linewidth=1, linestyle=":", zorder=1,
                        label="limit")
-        ax.scatter(truth, guess, s=6, color=DOT, alpha=0.35, linewidths=0, zorder=2)
-        ax.set_title(title, color=INK, fontsize=11, loc="left")
-        ax.set_xlabel("Solver", color=INK)
-        ax.set_ylabel("Model", color=INK)
-        ax.tick_params(colors=INK, labelsize=8)
+        ax.scatter(truth, guess, s=8, color=DOT, alpha=0.3, linewidths=0, zorder=2)
+        ax.set_title(title, color=INK, fontsize=18, loc="left")
+        ax.set_xlabel("Solver", color=INK, fontsize=16)
+        ax.set_ylabel("Model", color=INK, fontsize=16)
+        ax.tick_params(colors=INK, labelsize=14)
         ax.grid(color="#e1e0d9", linewidth=0.6)
         for side in ["top", "right"]:
             ax.spines[side].set_visible(False)
         for side in ["left", "bottom"]:
             ax.spines[side].set_color("#c3c2b7")
-        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="center left")
+        ax.legend(frameon=False, fontsize=13, labelcolor=INK, loc="center left")
     fig.suptitle("Model versus solver (scenarios the model never saw)",
-                 color="#0b0b0b", fontsize=13, x=0.02, ha="left")
+                 color="#0b0b0b", fontsize=22, x=0.02, ha="left")
     fig.tight_layout()
     fig.savefig(PLOT_FILE, dpi=130)
 

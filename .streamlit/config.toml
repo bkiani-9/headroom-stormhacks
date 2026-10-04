@@ -1,3 +1,14 @@
 [browser]
 # Keep the app offline: don't send usage statistics.
 gatherUsageStats = false
+
+[client]
+# Hide Streamlit's own menu and buttons: only the app is on screen.
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+# Readable from a metre away.
+baseFontSize = 20
+# Controls in dark grey: red and green are kept for the "room left" scale.
+primaryColor = "#33322f"
