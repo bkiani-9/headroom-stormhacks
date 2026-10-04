@@ -24,8 +24,9 @@ grid, which is close to the worst case for voltage, 175 of 177 can.
   - **On today's grid:** one snapshot of grid conditions.
   - **In 95% of grid conditions:** the size that fits in at least 95% of
     200 sampled load and generation conditions.
-- **Model:** how well the machine-learning model matches the solver, with
-  an error report and a model-versus-solver plot.
+- **Proof:** how well the machine-learning model matches the solver: the
+  test error in one sentence and a model-versus-solver plot, with the full
+  error report underneath.
 
 ## How it works
 
