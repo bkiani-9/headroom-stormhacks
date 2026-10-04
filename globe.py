@@ -25,7 +25,7 @@ CSS = """
 .gl canvas:focus-visible { box-shadow: 0 0 0 2px #FFD34D; }
 .gl .bar { display: flex; align-items: center; justify-content: center; gap: 14px;
            margin: 6px 0 2px; min-height: 30px; }
-.gl .status { font-size: 13px; color: #ADADAD; transition: color .3s; }
+.gl .status { font-size: 13px; color: #C8C8C8; transition: color .3s; }
 .gl .status.on { color: #FFD34D; }
 .gl button { font: inherit; font-size: 13px; color: #FFFFFF; background: transparent;
              border: 1.2px solid #8A8A8A; border-radius: 10px; padding: 4px 12px; cursor: pointer; }
@@ -90,7 +90,7 @@ function build(host, data) {
   };
 
   const resize = () => {
-    const size = Math.max(200, Math.min(wrap.clientWidth || 300, 360));
+    const size = Math.max(200, Math.min(wrap.clientWidth || 300, 440));
     const dpr = window.devicePixelRatio || 1;
     if (size === state.size && dpr === state.dpr) return;
     state.size = size; state.dpr = dpr;
@@ -332,7 +332,7 @@ export default function (component) {
 """
 
 # The version in the name makes browsers load this code fresh instead of a cached older copy.
-_globe = st.components.v2.component("headroom_globe_v1", css=CSS, js=JS)
+_globe = st.components.v2.component("headroom_globe_v2", css=CSS, js=JS)
 
 
 @st.cache_data

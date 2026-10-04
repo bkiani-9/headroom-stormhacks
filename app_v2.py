@@ -230,19 +230,22 @@ def cloudless_grid():
 
 @st.cache_data
 def grid_place():
-    """(latitude, longitude) of the grid's centre, and of each 20 kV connection point."""
+    """The grid's centre, its 20 kV connection points and the lines between them,
+    all as (latitude, longitude)."""
     net = load_grid()
-    points = [tuple(json.loads(g)["coordinates"][::-1])
-              for g in net.bus.geo[net.bus.vn_kv == 20].dropna()]
+    mv = net.bus.index[net.bus.vn_kv == 20]
+    where = {int(b): tuple(json.loads(g)["coordinates"][::-1]) for b, g in net.bus.geo[mv].dropna().items()}
+    lines = tuple((where[int(f)], where[int(t)]) for f, t in zip(net.line.from_bus, net.line.to_bus)
+                  if int(f) in where and int(t) in where)
     lat, lon = clear_sky.grid_centre()
-    return lat, lon, tuple(points)
+    return lat, lon, tuple(where.values()), lines
 
 
 # ---------------------------------------------------------------- look
 
 CSS = """
 <style>
-:root { --ink: #FFFFFF; --ink2: #D2D2D2; --ink3: #ADADAD; --edge: #4A4A4A; --panel: #121212;
+:root { --ink: #FFFFFF; --ink2: #E4E4E4; --ink3: #C2C2C2; --edge: #5C5C5C; --panel: #141414;
         --green: #63C132; --orange: #FFA61A; --red: #FF4D57; }
 html, body, .stApp, [data-testid="stAppViewContainer"] {
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
@@ -357,60 +360,85 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-sky .hr-note { margin: .45rem 0 0 2.9rem; }
 .hr-sky.orbit { margin: .35rem 0 1.1rem; }
 .hr-sky.orbit .hr-note { max-width: 70ch; }
-.hr-globe svg { display: block; width: 100%; max-width: 300px; height: auto; margin: .3rem auto .4rem; }
-.hr-globe.cell svg { max-width: 300px; margin-top: .8rem; }
-.st-key-orbit_text { max-width: 560px; }
-.st-key-orbit_text .hr-copy { margin-bottom: .2rem; }
-.st-key-orbit_text .hr-note { margin-top: .6rem; }
+.hr-globe svg { display: block; width: 100%; height: auto; }
 .hr-count.plain .big { color: var(--ink); }
 .st-key-view button { padding-left: .55rem; padding-right: .55rem; }
 .st-key-view button p { font-size: .9rem; white-space: nowrap; }
 /* Opening: a branded veil while the first page is built, then the blocks rise in, one after
    another. motion.py says when the page is ready; without it, the veil lifts after 6 s. */
+:root { --hr-ease: cubic-bezier(.16, 1, .3, 1); }
 .hr-veil { position: fixed; inset: 0; z-index: 1000002; background: #0A0A0A; display: flex;
            align-items: center; justify-content: center; pointer-events: none;
-           animation: hrVeilLate .6s ease 6s forwards; }
-html.hr-ready .hr-veil { animation: hrVeilGo .7s ease .2s forwards; }
+           animation: hrVeilLate .7s ease 6s forwards; }
+html.hr-ready .hr-veil { animation: hrVeilGo .9s ease .25s forwards; }
 .hr-veil .mark { display: flex; align-items: center; gap: 24px;
-                 animation: hrMarkIn .8s cubic-bezier(.2,.7,.2,1) .05s backwards; }
+                 animation: hrMarkIn 1s var(--hr-ease) .05s backwards; }
 .hr-veil .mark svg { width: 96px; height: auto; }
 .hr-veil .word { font-size: 2.7rem; font-weight: 600; color: #FFFFFF; line-height: 1; }
-.hr-veil .sub { font-size: 1rem; color: #ADADAD; margin-top: 12px; }
-.hr-veil .load { height: 2px; width: 200px; margin-top: 18px; background: #1F1F1F; overflow: hidden;
+.hr-veil .sub { font-size: 1rem; color: #C8C8C8; margin-top: 12px; }
+.hr-veil .load { height: 2px; width: 200px; margin-top: 18px; background: #262626; overflow: hidden;
                  border-radius: 2px; }
 .hr-veil .load i { display: block; height: 100%; width: 38%; background: #63C132; border-radius: 2px;
                    animation: hrLoad 1.15s ease-in-out infinite; }
 @keyframes hrVeilLate { to { opacity: 0; visibility: hidden; } }
-@keyframes hrVeilGo { to { opacity: 0; visibility: hidden; } }
-@keyframes hrMarkIn { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+@keyframes hrVeilGo { 0% { opacity: 1; } 100% { opacity: 0; visibility: hidden; transform: scale(1.04); } }
+@keyframes hrMarkIn { from { opacity: 0; transform: translateY(16px) scale(.96); filter: blur(6px); } }
 @keyframes hrLoad { from { transform: translateX(-100%); } to { transform: translateX(265%); } }
-[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child) {
-  animation: hrRiseLate .7s cubic-bezier(.2,.7,.2,1) 4s backwards; }
-html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child) {
-  animation: hrRise .8s cubic-bezier(.2,.7,.2,1) .45s backwards; }
-html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(3) { animation-delay: .56s; }
-html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(4) { animation-delay: .67s; }
-html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(5) { animation-delay: .78s; }
-html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(6) { animation-delay: .89s; }
-html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(n+7) { animation-delay: 1s; }
-html.hr-settled [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child) {
-  animation-duration: .42s; animation-delay: 0s; }
-@keyframes hrRise { from { opacity: 0; transform: translateY(18px); } }
-@keyframes hrRiseLate { from { opacity: 0; transform: translateY(18px); } }
-/* Panels further down rise into view as you scroll to them. */
+/* Blocks: hidden until the page is ready (4 s at most), then they rise in one after another.
+   Each view sits in its own container, so switching views plays the same entrance. */
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child):not(:has([class*="st-key-view_"])),
+[class*="st-key-view_"] > * {
+  animation: hrRiseLate .9s var(--hr-ease) 4s backwards; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child):not(:has([class*="st-key-view_"])) {
+  animation: hrRise 1.15s var(--hr-ease) .35s backwards; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(3):not(:has([class*="st-key-view_"])) { animation-delay: .5s; }
+html.hr-ready [class*="st-key-view_"] > * { animation: hrRise 1.15s var(--hr-ease) .65s backwards; }
+html.hr-ready [class*="st-key-view_"] > :nth-child(2) { animation-delay: .82s; }
+html.hr-ready [class*="st-key-view_"] > :nth-child(3) { animation-delay: .99s; }
+html.hr-ready [class*="st-key-view_"] > :nth-child(n+4) { animation-delay: 1.16s; }
+html.hr-settled [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child):not(:has([class*="st-key-view_"])) {
+  animation-duration: .8s; animation-delay: 0s; }
+html.hr-settled [class*="st-key-view_"] > * { animation-duration: .95s; animation-delay: .02s; }
+html.hr-settled [class*="st-key-view_"] > :nth-child(2) { animation-delay: .14s; }
+html.hr-settled [class*="st-key-view_"] > :nth-child(3) { animation-delay: .26s; }
+html.hr-settled [class*="st-key-view_"] > :nth-child(n+4) { animation-delay: .38s; }
+@keyframes hrRise { from { opacity: 0; transform: translateY(46px) scale(.985); filter: blur(7px); } }
+@keyframes hrRiseLate { from { opacity: 0; transform: translateY(46px) scale(.985); filter: blur(7px); } }
+/* Sections and panels further down rise into view as you scroll to them. */
 @supports (animation-timeline: view()) {
-  .hr-count, .hr-sky, .hr-lamps, .hr-tiles, .hr-race, .hr-plot, .hr-globe, .st-key-controls,
-  .st-key-orbit_text .hr-copy {
-    animation: hrReveal linear both; animation-timeline: view(); animation-range: entry 0% cover 18%; }
+  [class*="st-key-orbit_s"], [class*="st-key-proof_s"], [class*="st-key-proof_g"], .st-key-controls,
+  .hr-count:not([class*="st-key-orbit_s"] .hr-count), .hr-lamps, .hr-race {
+    animation: hrReveal linear both; animation-timeline: view(); animation-range: entry 0% cover 34%; }
 }
-@keyframes hrReveal { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@keyframes hrReveal { from { opacity: 0; transform: translateY(90px) scale(.95); }
+                      to { opacity: 1; transform: none; } }
+/* The year charts on From orbit shimmer a little, like sunlight. */
+.hr-sky.orbit .plot img { animation: hrFlicker 5.2s ease-in-out infinite; }
+.hr-sky.orbit.clear .plot img { animation-duration: 6.6s; animation-delay: -2.4s; }
+.hr-sky.orbit .plot::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2.9rem; right: 0;
+  pointer-events: none; border-radius: 3px; mix-blend-mode: screen; background-size: 240% 100%;
+  background-image: linear-gradient(100deg, rgba(255,240,190,0) 38%, rgba(255,240,190,.18) 50%, rgba(255,240,190,0) 62%);
+  animation: hrSheen 7.5s linear infinite; }
+.hr-sky.orbit.clear .plot::after { animation-delay: -3.7s; }
+@keyframes hrFlicker { 0%, 100% { filter: brightness(1); } 7% { filter: brightness(1.17) saturate(1.1); }
+  9% { filter: brightness(.9); } 12% { filter: brightness(1.08); } 16% { filter: brightness(1); }
+  55% { filter: brightness(1.04); } 59% { filter: brightness(1.15) saturate(1.08); } 61% { filter: brightness(.93); }
+  64% { filter: brightness(1.05); } 70% { filter: brightness(1); } }
+@keyframes hrSheen { from { background-position: 130% 0; } to { background-position: -130% 0; } }
 .st-key-hr_motion { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .hr-veil { display: none; }
-  [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > *, .hr-count, .hr-sky,
-  .hr-lamps, .hr-tiles, .hr-race, .hr-plot, .hr-globe, .st-key-controls, .st-key-orbit_text .hr-copy {
-    animation: none !important; }
+  [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > *, [class*="st-key-view_"] > *,
+  [class*="st-key-orbit_s"], [class*="st-key-proof_s"], [class*="st-key-proof_g"], .hr-count, .hr-lamps,
+  .hr-race, .st-key-controls, .hr-sky.orbit .plot img, .hr-sky.orbit .plot::after { animation: none !important; }
 }
+/* Sections: one idea per screen, with room to breathe. */
+[class*="st-key-orbit_s"], [class*="st-key-proof_g"] { padding: 2.2rem 0 1.6rem; border-top: 1px solid #262626; }
+.st-key-orbit_s1 { padding-top: 0; border-top: 0; }
+.hr-sky.orbit .plot img { height: 170px; }
+.hr-graph { border-radius: 14px; border: 1px solid var(--edge); background: #0F0F0F; padding: 12px; }
+.hr-graph img { display: block; width: 100%; height: auto; filter: invert(.94) contrast(1.12); border-radius: 6px; }
+.hr-globe.cell svg { max-width: 640px; margin: 0 auto; }
 </style>
 """
 
@@ -511,28 +539,59 @@ def sky_chart(marked_utc=(), mark_label="", caption=""):
 
 
 @st.cache_data
-def cell_svg(grid_lat, grid_lon, bus_points):
-    """One NASA data cell (1 degree square, to scale) around the grid's 177 connection points."""
-    w, h = 300, 210
+def cell_svg(grid_lat, grid_lon, bus_points, lines):
+    """One NASA data cell (1 degree square, to scale) with the grid inside it, and a
+    close-up of the grid: its connection points and the lines between them."""
     km_x = 111.32 * np.cos(np.radians(grid_lat))   # km per degree of longitude here
     km_y = 110.57                                  # km per degree of latitude
-    scale = 170 / km_y                             # px per km: the cell is 170 px tall
-    cx, cy = w / 2, h / 2 - 4
-    half_w, half_h = 0.5 * km_x * scale, 0.5 * km_y * scale
-    dots = "".join(f'<circle cx="{cx + (lo - grid_lon) * km_x * scale:.1f}" '
-                   f'cy="{cy - (la - grid_lat) * km_y * scale:.1f}" r="1.1"/>'
-                   for la, lo in bus_points)
-    bar = 20 * scale
-    return f"""<svg viewBox="0 0 {w} {h}" role="img"
-aria-label="One NASA data cell, 1 degree by 1 degree, with the grid's connection points inside it">
-<rect x="{cx - half_w:.1f}" y="{cy - half_h:.1f}" width="{2 * half_w:.1f}" height="{2 * half_h:.1f}"
-fill="rgba(255,211,77,.07)" stroke="{SUN}" stroke-width="1.2"/>
-<g fill="#7EDB4C">{dots}</g>
-<text x="{cx + half_w + 8:.1f}" y="{cy - half_h + 12:.1f}" fill="#D2D2D2" font-size="13">1° × 1°</text>
-<text x="{cx + half_w + 8:.1f}" y="{cy - half_h + 29:.1f}" fill="#ADADAD" font-size="12">{km_y:.0f} × {km_x:.0f} km</text>
-<text x="{cx + 14:.1f}" y="{cy + 22:.1f}" fill="#7EDB4C" font-size="12">the grid</text>
-<line x1="{cx - half_w:.1f}" y1="{h - 8}" x2="{cx - half_w + bar:.1f}" y2="{h - 8}" stroke="#ADADAD" stroke-width="1.2"/>
-<text x="{cx - half_w + bar + 6:.1f}" y="{h - 5}" fill="#ADADAD" font-size="12">20 km</text>
+    pts = np.array(bus_points)
+    xs, ys = (pts[:, 1] - grid_lon) * km_x, (pts[:, 0] - grid_lat) * km_y   # km east, north
+
+    def km(lat, lon):
+        return (lon - grid_lon) * km_x, (lat - grid_lat) * km_y
+
+    # The cell: 1 degree tall, drawn 290 px tall, centred on the grid.
+    s1 = 290 / km_y
+    cx, cy = 130, 185
+    hw, hh = 0.5 * km_x * s1, 0.5 * km_y * s1
+    small = "".join(f'<line x1="{cx + km(a[0], a[1])[0] * s1:.1f}" y1="{cy - km(a[0], a[1])[1] * s1:.1f}" '
+                    f'x2="{cx + km(b[0], b[1])[0] * s1:.1f}" y2="{cy - km(b[0], b[1])[1] * s1:.1f}"/>'
+                    for a, b in lines)
+    fx0, fx1 = cx + xs.min() * s1 - 4, cx + xs.max() * s1 + 4
+    fy0, fy1 = cy - ys.max() * s1 - 4, cy - ys.min() * s1 + 4
+    # The close-up: the grid's extent fills a 290 px square.
+    zx, zy, zs = 330, 40, 290
+    span = max(xs.max() - xs.min(), ys.max() - ys.min()) * 1.08
+    s2 = zs / span
+    mx, my = (xs.max() + xs.min()) / 2, (ys.max() + ys.min()) / 2
+
+    def zoom(lat, lon):
+        x, y = km(lat, lon)
+        return zx + zs / 2 + (x - mx) * s2, zy + zs / 2 - (y - my) * s2
+
+    big = "".join('<line x1="{:.1f}" y1="{:.1f}" x2="{:.1f}" y2="{:.1f}"/>'.format(*zoom(*a), *zoom(*b))
+                  for a, b in lines)
+    dots = "".join('<circle cx="{:.1f}" cy="{:.1f}" r="2.3"/>'.format(*zoom(la, lo)) for la, lo in bus_points)
+    bar1, bar2 = 20 * s1, 5 * s2
+    return f"""<svg viewBox="0 0 640 380" role="img"
+aria-label="One NASA data cell, 1 degree by 1 degree, with the whole grid inside it, and a close-up of the grid's {len(bus_points)} connection points and lines">
+<text x="{cx - hw:.1f}" y="22" fill="#F2F2F2" font-size="15" font-weight="600">One NASA data cell</text>
+<rect x="{cx - hw:.1f}" y="{cy - hh:.1f}" width="{2 * hw:.1f}" height="{2 * hh:.1f}" rx="2"
+fill="rgba(255,211,77,.08)" stroke="{SUN}" stroke-width="1.5"/>
+<text x="{cx:.1f}" y="{cy + hh - 12:.1f}" fill="#D6D6D6" font-size="13" text-anchor="middle">1° × 1°: {km_y:.0f} × {km_x:.0f} km</text>
+<g stroke="#7EDB4C" stroke-width=".8">{small}</g>
+<rect x="{fx0:.1f}" y="{fy0:.1f}" width="{fx1 - fx0:.1f}" height="{fy1 - fy0:.1f}" fill="none" stroke="#F2F2F2"
+stroke-width=".8" stroke-dasharray="2 2"/>
+<line x1="{fx1:.1f}" y1="{fy0:.1f}" x2="{zx}" y2="{zy}" stroke="#8C8C8C" stroke-width=".8" stroke-dasharray="3 3"/>
+<line x1="{fx1:.1f}" y1="{fy1:.1f}" x2="{zx}" y2="{zy + zs}" stroke="#8C8C8C" stroke-width=".8" stroke-dasharray="3 3"/>
+<rect x="{zx}" y="{zy}" width="{zs}" height="{zs}" rx="10" fill="#0F1410" stroke="#5C5C5C"/>
+<text x="{zx}" y="22" fill="#F2F2F2" font-size="15" font-weight="600">The grid: {len(bus_points)} connection points</text>
+<g stroke="#7EDB4C" stroke-width="1.4" stroke-linecap="round">{big}</g>
+<g fill="#EAF7E2">{dots}</g>
+<line x1="{cx - hw:.1f}" y1="{cy + hh + 22:.1f}" x2="{cx - hw + bar1:.1f}" y2="{cy + hh + 22:.1f}" stroke="#D6D6D6" stroke-width="1.5"/>
+<text x="{cx - hw + bar1 + 8:.1f}" y="{cy + hh + 26:.1f}" fill="#D6D6D6" font-size="13">20 km</text>
+<line x1="{zx}" y1="{zy + zs + 22}" x2="{zx + bar2:.1f}" y2="{zy + zs + 22}" stroke="#D6D6D6" stroke-width="1.5"/>
+<text x="{zx + bar2 + 8:.1f}" y="{zy + zs + 26}" fill="#D6D6D6" font-size="13">5 km</text>
 </svg>"""
 
 
@@ -1067,10 +1126,25 @@ def run_race(slot):
                                         solver_total_s=solver_total)
 
 
+# The proof, one graph at a time: (image in results/, title, what it shows, metric key).
+PROOF_GRAPHS = (
+    ("proof_voltage", "Highest voltage",
+     "The voltage at the grid's highest point. The shaded band is close to the safety limit (the "
+     "dotted line), where a small error could turn a yes into a no.", "max_voltage_pu"),
+    ("proof_line", "Busiest power line",
+     "How full the busiest line is, in % of what it can carry. The AI keeps up across the whole "
+     "range, including past 100%, where the line would overload.", "max_line_loading"),
+    ("proof_trafo", "Busiest substation transformer",
+     "The same for the transformers that link this grid to the wider network.", "max_trafo_loading"),
+    ("proof_capacity", "Capacity at each connection point",
+     "The number Headroom exists to find: how much new solar each point can take. The AI's search "
+     "against the physics engine's own, at every point under four grid conditions.", None),
+)
+
+
 def proof():
     metrics_file = ml.ROOT / "results" / "model_metrics.json"
     recheck_file = ml.ROOT / "results" / "capacity95_recheck.json"
-    plot_file = ml.ROOT / "results" / "model_vs_solver.png"
     if not metrics_file.exists():
         st.info("No test results yet: run `py -3.14 train_model.py`.")
         return
@@ -1090,41 +1164,75 @@ def proof():
         tiles.append((f"{recheck['buses_lowered']} of {recheck['buses']}",
                       f"flexible capacities lowered by the physics recheck, by "
                       f"{recheck['most_lowered_mw']:.1f} MW at most"))
-    html('<div class="hr-tiles">' + "".join(
-        f'<div class="hr-tile"><div class="big">{big}</div><div class="lbl">{lbl}</div></div>'
-        for big, lbl in tiles) + "</div>")
+    with st.container(key="proof_s1"):
+        html('<div class="hr-tiles">' + "".join(
+            f'<div class="hr-tile"><div class="big">{big}</div><div class="lbl">{lbl}</div></div>'
+            for big, lbl in tiles) + "</div>")
 
-    left, right = st.columns([1, 1.05], gap="large")
-    with left, st.container(key="proof_left"):
-        html('<div class="hr-h" style="margin-top:0">Why use AI at all</div>')
-        html(f"""<div class="hr-copy">One capacity search takes about {SOLVES_PER_SEARCH} physics
+    with st.container(key="proof_s2"):
+        left, right = st.columns([1, 1], gap="large")
+        with left, st.container(key="proof_left"):
+            html('<div class="hr-h" style="margin-top:0">Why use AI at all</div>')
+            html(f"""<div class="hr-copy">One capacity search takes about {SOLVES_PER_SEARCH} physics
 checks. A map that holds in 95% of conditions needs that search for every connection point under a
 thousand grid conditions. The AI does the same search in a fraction of the time, and the physics
 engine then checks its answers. Try it: every point under {RACE_CONDITIONS} grid
 conditions.</div>""")
-        start = st.button(f"Run {len(mv_buses) * RACE_CONDITIONS:,} capacity searches",
-                          key="race")
-        slot = st.empty()
-        if start:
-            run_race(slot)
-        elif "race_result" in st.session_state:
-            r = st.session_state.race_result
-            slot.markdown(race_markup(r["done"], r["total"], r["model_s"], r["solver_total_s"],
-                                      True), unsafe_allow_html=True)
+            start = st.button(f"Run {len(mv_buses) * RACE_CONDITIONS:,} capacity searches",
+                              key="race")
+            slot = st.empty()
+            if start:
+                run_race(slot)
+            elif "race_result" in st.session_state:
+                r = st.session_state.race_result
+                slot.markdown(race_markup(r["done"], r["total"], r["model_s"], r["solver_total_s"],
+                                          True), unsafe_allow_html=True)
+            else:
+                slot.markdown(race_markup(0, len(mv_buses) * RACE_CONDITIONS, 0.0, 0.0, False),
+                              unsafe_allow_html=True)
+        with right:
+            near = m.get("pass_fail_near_limit")
+            near_text = (f" Close to a limit, where a small error can flip the answer, it still agrees "
+                         f"{near['accuracy']:.1%} of the time ({near['cases']:,} cases)." if near else "")
+            html(f"""<div class="hr-h" style="margin-top:0">How to read the graphs below</div>
+<div class="hr-copy">Scroll down for one graph at a time. Each dot is a grid condition the AI never
+saw: the physics engine's answer across, the AI's answer up. On the dashed line, they agree
+exactly.{near_text}</div>
+<div class="hr-note">The AI is never trusted alone: the physics engine rechecks every capacity
+before it goes on the map.</div>""")
+
+    for i, (name, title, text, key) in enumerate(PROOF_GRAPHS):
+        path = ml.ROOT / "results" / f"{name}.png"
+        if not path.exists():
+            continue
+        if key:
+            e = m["errors"][key]
+            if key == "max_voltage_pu":
+                metric = (f"Average error <b>{e['mean_abs_error']:.4f} pu</b>, "
+                          f"{e['mean_abs_error'] * 100:.2f}% of normal voltage; 95% of errors are "
+                          f"under {e['p95_abs_error']:.4f} pu.")
+            else:
+                metric = (f"Average error <b>{e['mean_abs_error']:.1f} points</b> of loading; 95% of "
+                          f"errors are under {e['p95_abs_error']:.1f}.")
         else:
-            slot.markdown(race_markup(0, len(mv_buses) * RACE_CONDITIONS, 0.0, 0.0, False),
-                          unsafe_allow_html=True)
-        near = m.get("pass_fail_near_limit")
-        if near:
-            html(f"""<div class="hr-note" style="margin-top:.2rem">Close to a limit, where a
-small error can flip the answer, it still agrees {near['accuracy']:.1%} of the time
-({near['cases']:,} cases). The AI is never trusted alone: the physics engine rechecks every
-capacity.</div>""")
-    with right:
-        if plot_file.exists():
-            data = base64.b64encode(plot_file.read_bytes()).decode()
-            html(f'<div class="hr-plot"><img alt="Model against solver on scenarios the model '
-                 f'never saw" src="data:image/png;base64,{data}"></div>')
+            c = m["capacity"]
+            metric = (f"Average error <b>{c['mean_abs_error_mw']:.2f} MW</b>; "
+                      f"{c['share_within_0_5_mw']:.0%} of points are within 0.5 MW of the physics "
+                      f"engine.")
+        data = base64.b64encode(path.read_bytes()).decode()
+        image = (f'<div class="hr-graph"><img alt="{title}: the AI against the physics engine, '
+                 f'on cases it never saw" src="data:image/png;base64,{data}"></div>')
+        words = (f'<div class="hr-h" style="margin-top:0">{title}</div>'
+                 f'<div class="hr-copy">{text}</div><div class="hr-where">{metric}</div>')
+        with st.container(key=f"proof_g{i}"):
+            if i % 2 == 0:
+                img_col, text_col = st.columns([1.3, 1], gap="large", vertical_alignment="center")
+            else:
+                text_col, img_col = st.columns([1, 1.3], gap="large", vertical_alignment="center")
+            with img_col:
+                html(image)
+            with text_col:
+                html(words)
 
 
 def electrical_space():
@@ -1188,19 +1296,30 @@ def from_orbit():
         marked = r["fail_times_utc"]
         if r["solver_fail_hours"]:
             mark = f"the {r['solver_fail_hours']:,} hours {mw:g} MW at bus {bus} would need curtailing"
-    lat, lon, points = grid_place()
+    lat, lon, points, lines = grid_place()
 
-    left, right = st.columns([1.55, 1], gap="large")
-    with left:
-        tiles = ""
-        if has_clear and bus in caps.index:
-            size = 5.0
-            firm_n = int((caps.firm >= size - 1e-9).sum())
-            rule_n = int((caps.rule >= size - 1e-9).sum())
-            clear_n = int((caps.clear >= size - 1e-9).sum())
-            row = caps.loc[bus]
-            share = real.sum() / clear.sum()
-            tiles = f"""<div class="hr-counts">
+    # 1. The two years, seen from orbit.
+    with st.container(key="orbit_s1"):
+        html(f"""<div class="hr-h" style="margin-top:0">2024 over the grid, as NASA's satellites measured it</div>
+<div class="hr-sky orbit">{sky_axes(sky_uri(real, peak, marked), 170)}</div>
+<div class="hr-h">The same year with no clouds</div>
+<div class="hr-sky orbit clear">{sky_axes(sky_uri(clear, peak), 170,
+                               "Every hour of 2024 over the grid if there had been no clouds")}
+{sky_keys(peak, mark)}<div class="hr-note">Each column is a day and each row an hour (local
+standard time). The dark streaks in the real year are clouds passing over; the cloudless year is
+the Haurwitz clear-sky model.</div></div>""")
+
+    # 2. What the clouds change.
+    if has_clear and bus in caps.index:
+        size = 5.0
+        firm_n = int((caps.firm >= size - 1e-9).sum())
+        rule_n = int((caps.rule >= size - 1e-9).sum())
+        clear_n = int((caps.clear >= size - 1e-9).sum())
+        row = caps.loc[bus]
+        share = real.sum() / clear.sum()
+        with st.container(key="orbit_s2"):
+            html(f"""<div class="hr-h" style="margin-top:0">What the clouds change</div>
+<div class="hr-counts">
 <div class="hr-count rule"><div class="big">+{rule_n - firm_n}<small>vs +{clear_n - firm_n}</small></div>
 <div class="lbl">more connection points take {size:g} MW under the 3% rule with the real sky,
 against a cloudless year</div></div>
@@ -1208,30 +1327,37 @@ against a cloudless year</div></div>
 <div class="lbl">what bus {bus} can take under the 3% rule, real sky against cloudless</div></div>
 <div class="hr-count plain"><div class="big">{share:.0%}</div>
 <div class="lbl">of a cloudless year's sunlight reached the grid in 2024: {real.sum() / 1000:,.0f}
-of {clear.sum() / 1000:,.0f} kWh per m²</div></div></div>"""
-        html(f"""<div class="hr-h" style="margin-top:0">2024 over the grid, as NASA's satellites measured it</div>
-<div class="hr-sky orbit">{sky_axes(sky_uri(real, peak, marked), 150)}</div>
-<div class="hr-h">The same year with no clouds</div>
-<div class="hr-sky orbit">{sky_axes(sky_uri(clear, peak), 150,
-                         "Every hour of 2024 over the grid if there had been no clouds")}
-{sky_keys(peak, mark)}<div class="hr-note">Each column is a day and each row an hour (local
-standard time). The dark streaks in the real year are clouds passing over; the cloudless year is
-the Haurwitz clear-sky model. Curtailment only bites in full sun, so the clouds are what let the 3%
-rule open so many more connection points.</div></div>
-{tiles}""")
-    with right, st.container(key="orbit_text"):
-        html('<div class="hr-h" style="margin:0 0 .3rem">Where the data comes from</div>')
-        show_globe(lat, lon)
-        html(f"""<div class="hr-copy">NASA's CERES instruments on the Terra and Aqua satellites measure
-the sunlight Earth reflects, and geostationary weather satellites track the clouds hour by hour. NASA
-turns both into hourly sunlight at the ground (CERES SYN1deg, through NASA POWER).</div>
-<div class="hr-globe cell">{cell_svg(lat, lon, points)}</div>
-<div class="hr-copy">NASA's data comes in cells of 1° × 1°, about 111 × 74 km here. All 177
-connection points sit inside one cell, so one series of sunlight covers the whole grid.</div>
+of {clear.sum() / 1000:,.0f} kWh per m²</div></div></div>
+<div class="hr-note">Curtailment only bites in full sun, so the clouds are what let the 3% rule open
+so many more connection points.</div>""")
+
+    # 3. Where the data comes from.
+    with st.container(key="orbit_s3"):
+        globe_col, text_col = st.columns([1, 1.1], gap="large", vertical_alignment="center")
+        with globe_col:
+            show_globe(lat, lon)
+        with text_col:
+            html("""<div class="hr-h" style="margin-top:0">Where the data comes from</div>
+<div class="hr-copy">NASA's CERES instruments on the Terra and Aqua satellites measure the sunlight
+Earth reflects, and geostationary weather satellites track the clouds hour by hour. NASA turns both
+into hourly sunlight at the ground (CERES SYN1deg, through NASA POWER).</div>
+<div class="hr-copy">Drag the globe to turn it. Each time the satellite passes over the grid, the
+grid lights up.</div>
 <div class="hr-note">The orbit and its speed are for illustration: tilted 98° like Terra's and
-Aqua's, but a real polar orbit passes over a given place about twice a day, not on every lap. The
-sunlight was downloaded once with requests, read with pandas and stored with the app, so it runs
-offline. Map: Natural Earth.</div>""")
+Aqua's, but a real polar orbit passes over a given place about twice a day, not on every lap.</div>""")
+
+    # 4. The grid inside one data cell.
+    with st.container(key="orbit_s4"):
+        text_col, cell_col = st.columns([1, 1.3], gap="large", vertical_alignment="center")
+        with text_col:
+            html(f"""<div class="hr-h" style="margin-top:0">One data cell covers the whole grid</div>
+<div class="hr-copy">NASA's sunlight comes in cells of 1° × 1°, about 111 × 74 km here. All
+{len(points)} connection points, and every line between them, sit inside one cell, so one series
+of sunlight covers the whole grid.</div>
+<div class="hr-note">The sunlight was downloaded once with requests, read with pandas and stored
+with the app, so it runs offline. Map: Natural Earth.</div>""")
+        with cell_col:
+            html(f'<div class="hr-globe cell">{cell_svg(lat, lon, points, lines)}</div>')
 
 
 view = st.session_state.view
@@ -1243,15 +1369,19 @@ with how_col:
     with st.popover("How Headroom works", width="stretch"):
         st.markdown(HOW_IT_WORKS)
 
-if view == "Capacity map":
-    capacity_map()
-elif view == "From orbit":
-    from_orbit()
-elif view == "Electrical space":
-    electrical_space()
-elif view == "Proof":
-    proof()
-else:
-    try_a_project()
+# Each view in its own container, so switching views plays the entrance again.
+VIEW_KEYS = {"Try a project": "try", "Capacity map": "map", "From orbit": "orbit",
+             "Electrical space": "space", "Proof": "proof"}
+with st.container(key=f"view_{VIEW_KEYS.get(view, 'try')}"):
+    if view == "Capacity map":
+        capacity_map()
+    elif view == "From orbit":
+        from_orbit()
+    elif view == "Electrical space":
+        electrical_space()
+    elif view == "Proof":
+        proof()
+    else:
+        try_a_project()
 
 start_motion()  # last, so it runs once the page above exists

@@ -324,7 +324,7 @@ def capacity_board(net, layout, size, firm, flexible, selected, kind="flex", gai
 
 CSS = """
 :host { display: block; }
-.hb { --ink: #FFFFFF; --ink2: #D2D2D2; --ink3: #ADADAD; --tile: #161616; --edge: #A0A0A0;
+.hb { --ink: #FFFFFF; --ink2: #E4E4E4; --ink3: #C2C2C2; --tile: #161616; --edge: #A0A0A0;
       --lag: 0ms; position: relative; color: var(--ink);
       font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
       font-variant-numeric: tabular-nums; user-select: none; }
@@ -672,7 +672,7 @@ export default function (component) {
 """
 
 # The version in the name makes browsers load this code fresh instead of a cached older copy.
-_board = st.components.v2.component("headroom_board_v4", css=CSS, js=JS)
+_board = st.components.v2.component("headroom_board_v5", css=CSS, js=JS)
 
 
 def show_board(data, key="board"):

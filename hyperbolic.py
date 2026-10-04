@@ -229,7 +229,7 @@ CSS = """
 .rim { fill: #0E0E0E; stroke: #4A4A4A; stroke-width: 1.5; }
 .tiles { fill: none; stroke: #2F2F2F; stroke-width: 1.2; pointer-events: none; }
 .ring { fill: none; stroke: #343434; stroke-width: 1; stroke-dasharray: 3 6; pointer-events: none; }
-.ring-label { fill: #8A8A8A; font-size: 13px; text-anchor: start; pointer-events: none; }
+.ring-label { fill: #B4B4B4; font-size: 13px; text-anchor: start; pointer-events: none; }
 .geo { fill: none; stroke-linecap: round; pointer-events: none; }
 .dots { fill: none; stroke: #FFFFFF; stroke-linecap: round; stroke-dasharray: 0 13;
         pointer-events: none; }
@@ -248,7 +248,7 @@ CSS = """
         margin-bottom: 10px; }
 .hud { flex: 1 1 auto; min-width: 0; pointer-events: none; }
 .hud .t { font-size: 22px; font-weight: 600; line-height: 1.2; }
-.hud .d { font-size: 14px; color: #ADADAD; margin-top: 3px; line-height: 1.35; }
+.hud .d { font-size: 14px; color: #C8C8C8; margin-top: 3px; line-height: 1.35; }
 .bar button, .modes button { background: #0A0A0A; color: #FFFFFF;
               border: 1.5px solid #A0A0A0; border-radius: 10px; padding: 5px 12px;
               font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
@@ -260,7 +260,7 @@ CSS = """
 .modes button:last-child { border-radius: 0 10px 10px 0; }
 .modes button.on { background: #FFFFFF; color: #0A0A0A; border-color: #FFFFFF; }
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin: 22px 0 10px; }
-.hint { flex: 1 1 240px; min-height: 2.7em; margin-left: 6px; font-size: 13.5px; line-height: 1.35; color: #9A9A9A;
+.hint { flex: 1 1 240px; min-height: 2.7em; margin-left: 6px; font-size: 13.5px; line-height: 1.35; color: #C0C0C0;
         display: flex; align-items: center; }
 .tipd { position: absolute; pointer-events: none; opacity: 0; z-index: 3;
         background: rgba(22,22,22,.97); border: 1px solid #6E6E6E; border-radius: 9px;
@@ -786,7 +786,7 @@ export default function (component) {
 """
 
 # The version in the name makes browsers load this code fresh instead of a cached older copy.
-_disk = st.components.v2.component("headroom_disk_v4", css=CSS, js=JS)
+_disk = st.components.v2.component("headroom_disk_v5", css=CSS, js=JS)
 
 
 def show_disk(data, key="disk"):
