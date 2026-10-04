@@ -1,0 +1,8 @@
+{
+  "buses": 177,
+  "buses_lowered": 96,
+  "total_lowered_mw": 20.8,
+  "most_lowered_mw": 0.7,
+  "recheck_rounds": 8,
+  "recheck_conditions": 50
+}

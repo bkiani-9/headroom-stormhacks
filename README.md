@@ -23,7 +23,8 @@ grid, which is close to the worst case for voltage, 175 of 177 can.
   stops it on hover. Two versions:
   - **On today's grid:** one snapshot of grid conditions.
   - **In 95% of grid conditions:** the size that fits in at least 95% of
-    200 sampled load and generation conditions.
+    sampled load and generation conditions, checked with the real power
+    flow.
 - **Proof:** how well the machine-learning model matches the solver: the
   test error in one sentence and a model-versus-solver plot, with the full
   error report underneath.
@@ -43,11 +44,15 @@ grid, which is close to the worst case for voltage, 175 of 177 can.
    flow. They were trained on 60,000 scenarios solved with the real power
    flow: 20,000 random ones, plus 40,000 placed near the pass/fail
    boundary, where accuracy matters most.
-5. **95% map** (`capacity95.py`): for 200 sampled conditions (load 10-60%,
-   existing generation 0-80%), the model proposes each bus's 95% size; then
-   the **real power flow rechecks it under all 200 conditions** and steps
-   0.1 MW up or down until it is exact. The model only speeds up the
-   search; every number on the map comes from the solver.
+5. **95% map** (`capacity95.py`), in two stages:
+   - **Model:** for 1,000 sampled conditions (load 10-60%, existing
+     generation 0-80%), the model finds each bus's capacity under every
+     condition; the 95% capacity is the size that fits in at least 950.
+   - **Solver recheck:** the **real power flow** tests each bus's 95%
+     capacity on **50 new conditions**. Wherever more than 5% fail, the
+     capacity is lowered 0.1 MW and rechecked. 96 of 177 buses were
+     lowered, by 0.1-0.7 MW (20.8 MW in total); none was left failing in
+     more than 5% of the 50.
 
 ### How good is the model?
 
@@ -74,7 +79,8 @@ The full report is in `results/model_report.md`, and the plot in
 - **Grid conditions matter a lot.** The far-end bus takes 1.9 MW on
   today's grid but 10.6 MW under high load and no existing solar. In 95%
   of conditions, capacities range from 3.0 MW to 20 MW or more (median
-  9.9 MW).
+  10.0 MW, against 8.6 MW on today's grid); 173 of 177 buses have more
+  room than on today's grid.
 
 ## Run it
 
@@ -113,7 +119,8 @@ by default (`--workers N` to change; 8 ran this laptop out of memory).
 | 6 | `py -3.14 train_model.py` | better model | 1 min |
 | 7 | `py -3.14 make_scenarios.py --edges` | `results/scenarios_edges.csv` | 15 min |
 | 8 | `py -3.14 train_model.py` | final model and report | 1.5 min |
-| 9 | `py -3.14 capacity95.py` | `results/capacity95.csv`, the 95% map | about 65 min |
+| 9 | `py -3.14 capacity95.py` | `results/capacity95.csv`, the 95% map from the model | 1.5 min |
+| 10 | `py -3.14 capacity95.py --recheck` | solver-rechecked `capacity95.csv` and `capacity95_recheck.json` | 14 min |
 
 Steps 5 and 7 use the current model to choose where to sample, so their
 results depend on the order above.
@@ -144,8 +151,13 @@ results depend on the order above.
 - One project at a time. Existing generation and load are scaled uniformly
   across the grid (decisions.md ranges); real conditions vary bus by bus
   and hour by hour.
-- "95% of conditions" means 95% of 200 conditions sampled uniformly over
-  those ranges, not 95% of the hours in a real year.
+- "95% of conditions" means 95% of conditions sampled uniformly over
+  those ranges, not 95% of the hours in a real year. The solver recheck
+  uses 50 conditions, so its pass rate is itself an estimate: a bus that
+  truly fails in 5% of conditions will show 3 or more failures in 50
+  about half the time, which is why many buses were lowered by
+  0.1-0.2 MW. The lowering only ever moves capacities in the safe
+  direction.
 - The capacity search assumes that once a size fails, every bigger size
   fails too. The tests check that each capacity passes and that 0.1 MW
   more fails.

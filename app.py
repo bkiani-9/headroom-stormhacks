@@ -285,8 +285,8 @@ def show_capacity_view(saved, error):
                 st.write(f"Nothing breaks up to {MAX_SEARCH_MW:g} MW.")
             if in_95:
                 st.caption(
-                    f"At this size, {capacity.pass_share[selected]:.1%} of 200 "
-                    "sampled grid conditions pass, checked with the real power flow."
+                    f"At this size, {capacity.pass_share[selected]:.0%} of 50 new "
+                    "grid conditions pass, checked with the real power flow."
                 )
             if placeholder:
                 st.caption("Placeholder data, not real.")
@@ -296,9 +296,10 @@ def show_capacity_view(saved, error):
     if in_95:
         st.subheader("How much solar each bus can take in 95% of grid conditions")
         st.caption(
-            "Load 10-60% and existing solar 0-80%, 200 sampled conditions. The "
-            "ML model proposes each bus's size and the real power flow checks "
-            "it passes in at least 95% of them. Red is little room, green is plenty."
+            "Load 10-60% and existing solar 0-80%. The ML model finds the size "
+            "each bus takes in 95% of 1,000 sampled conditions; the real power "
+            "flow then rechecks it on 50 new conditions, lowering it 0.1 MW at a "
+            "time wherever more than 5% fail. Red is little room, green is plenty."
         )
     else:
         st.subheader("How much solar each bus can take")

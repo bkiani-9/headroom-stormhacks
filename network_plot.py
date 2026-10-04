@@ -246,7 +246,7 @@ def capacity_figure(net, capacity, max_mw, selected_bus=None, placeholder=False)
             stop = f"Nothing breaks up to {max_mw:g} MW"
         if in_95:
             text = (f"Capacity in 95% of conditions: {mw:.1f} MW<br>"
-                    f"Passes in {capacity.pass_share[b]:.1%} of sampled conditions "
+                    f"Passes in {capacity.pass_share[b]:.0%} of 50 new conditions "
                     f"(solver-checked)<br>{stop}")
         else:
             text = f"Capacity {mw:.1f} MW<br>{stop}"

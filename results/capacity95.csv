@@ -1,178 +1,178 @@
 bus,model95_mw,capacity95_mw,pass_share,checked_by,lowered_by_mw,limit
-0,12.8,12.8,0.959,"model, 1,000 conditions",0.0,a line (model)
-1,12.4,12.4,0.968,"model, 1,000 conditions",0.0,a line (model)
-2,12.4,12.4,0.968,"model, 1,000 conditions",0.0,a line (model)
-3,12.4,12.4,0.973,"model, 1,000 conditions",0.0,a line (model)
-4,12.8,12.8,0.956,"model, 1,000 conditions",0.0,a line (model)
-5,12.4,12.4,1.0,"model, 1,000 conditions",0.0,a line (model)
-6,20.0,20.0,0.999,"model, 1,000 conditions",0.0,
-7,20.0,20.0,0.999,"model, 1,000 conditions",0.0,
-8,12.8,12.8,0.957,"model, 1,000 conditions",0.0,a line (model)
-29,20.0,20.0,0.975,"model, 1,000 conditions",0.0,
-30,20.0,20.0,0.978,"model, 1,000 conditions",0.0,
-31,11.3,11.3,0.951,"model, 1,000 conditions",0.0,a line (model)
-32,8.4,8.4,0.956,"model, 1,000 conditions",0.0,voltage (model)
-33,9.5,9.5,0.957,"model, 1,000 conditions",0.0,voltage (model)
-34,9.5,9.5,0.951,"model, 1,000 conditions",0.0,voltage (model)
-35,14.8,14.8,0.961,"model, 1,000 conditions",0.0,a line (model)
-36,4.1,4.1,0.951,"model, 1,000 conditions",0.0,voltage (model)
-37,12.8,12.8,0.968,"model, 1,000 conditions",0.0,a line (model)
-38,6.9,6.9,0.95,"model, 1,000 conditions",0.0,voltage (model)
-39,20.0,20.0,1.0,"model, 1,000 conditions",0.0,
-40,4.8,4.8,0.95,"model, 1,000 conditions",0.0,voltage (model)
-41,12.8,12.8,0.968,"model, 1,000 conditions",0.0,a line (model)
-42,5.3,5.3,0.955,"model, 1,000 conditions",0.0,voltage (model)
-43,12.4,12.4,0.978,"model, 1,000 conditions",0.0,a line (model)
-44,6.5,6.5,0.957,"model, 1,000 conditions",0.0,voltage (model)
-45,11.4,11.4,0.952,"model, 1,000 conditions",0.0,a line (model)
-46,7.8,7.8,0.95,"model, 1,000 conditions",0.0,voltage (model)
-47,11.3,11.3,0.955,"model, 1,000 conditions",0.0,a line (model)
-48,5.5,5.5,0.956,"model, 1,000 conditions",0.0,voltage (model)
-49,11.3,11.3,0.957,"model, 1,000 conditions",0.0,a line (model)
-50,5.6,5.6,0.956,"model, 1,000 conditions",0.0,voltage (model)
-51,5.1,5.1,0.956,"model, 1,000 conditions",0.0,voltage (model)
-52,11.3,11.3,0.957,"model, 1,000 conditions",0.0,a line (model)
-53,7.2,7.2,0.964,"model, 1,000 conditions",0.0,voltage (model)
-54,10.8,10.8,0.95,"model, 1,000 conditions",0.0,voltage (model)
-55,11.4,11.4,0.951,"model, 1,000 conditions",0.0,a line (model)
-56,6.3,6.3,0.957,"model, 1,000 conditions",0.0,voltage (model)
-57,7.0,7.0,0.959,"model, 1,000 conditions",0.0,voltage (model)
-64,4.2,4.2,0.951,"model, 1,000 conditions",0.0,voltage (model)
-65,4.1,4.1,0.951,"model, 1,000 conditions",0.0,voltage (model)
-71,20.0,20.0,1.0,"model, 1,000 conditions",0.0,
-72,13.0,13.0,0.969,"model, 1,000 conditions",0.0,a line (model)
-73,20.0,20.0,1.0,"model, 1,000 conditions",0.0,
-74,13.1,13.1,0.95,"model, 1,000 conditions",0.0,a line (model)
-75,13.0,13.0,0.969,"model, 1,000 conditions",0.0,a line (model)
-76,8.6,8.6,0.95,"model, 1,000 conditions",0.0,voltage (model)
-77,14.8,14.8,0.961,"model, 1,000 conditions",0.0,a line (model)
-78,14.8,14.8,0.961,"model, 1,000 conditions",0.0,a line (model)
-79,4.3,4.3,0.951,"model, 1,000 conditions",0.0,voltage (model)
-80,20.0,20.0,0.984,"model, 1,000 conditions",0.0,
-81,12.8,12.8,0.966,"model, 1,000 conditions",0.0,a line (model)
-82,4.3,4.3,0.951,"model, 1,000 conditions",0.0,voltage (model)
-83,12.9,12.9,0.95,"model, 1,000 conditions",0.0,a line (model)
-84,6.2,6.2,0.956,"model, 1,000 conditions",0.0,voltage (model)
-85,7.8,7.8,0.957,"model, 1,000 conditions",0.0,voltage (model)
-86,20.0,20.0,1.0,"model, 1,000 conditions",0.0,
-94,11.1,11.1,0.95,"model, 1,000 conditions",0.0,voltage (model)
-95,11.5,11.5,0.957,"model, 1,000 conditions",0.0,voltage (model)
-98,9.8,9.8,0.952,"model, 1,000 conditions",0.0,voltage (model)
-100,10.1,10.1,0.952,"model, 1,000 conditions",0.0,voltage (model)
-101,12.3,12.3,0.954,"model, 1,000 conditions",0.0,a line (model)
-102,10.4,10.4,0.952,"model, 1,000 conditions",0.0,voltage (model)
-103,11.6,11.6,0.95,"model, 1,000 conditions",0.0,a line (model)
-104,11.6,11.6,0.95,"model, 1,000 conditions",0.0,a line (model)
-106,11.5,11.5,0.95,"model, 1,000 conditions",0.0,a line (model)
-107,9.8,9.8,0.952,"model, 1,000 conditions",0.0,voltage (model)
-108,11.5,11.5,0.95,"model, 1,000 conditions",0.0,a line (model)
-109,5.4,5.4,0.951,"model, 1,000 conditions",0.0,voltage (model)
-110,11.5,11.5,0.95,"model, 1,000 conditions",0.0,a line (model)
-111,3.5,3.5,0.951,"model, 1,000 conditions",0.0,voltage (model)
-116,3.6,3.6,0.951,"model, 1,000 conditions",0.0,voltage (model)
-117,13.3,13.3,0.951,"model, 1,000 conditions",0.0,a line (model)
-118,12.4,12.4,0.973,"model, 1,000 conditions",0.0,a line (model)
-119,12.4,12.4,0.989,"model, 1,000 conditions",0.0,a line (model)
-120,13.3,13.3,0.95,"model, 1,000 conditions",0.0,a line (model)
-126,20.0,20.0,0.975,"model, 1,000 conditions",0.0,
-129,6.6,6.6,0.953,"model, 1,000 conditions",0.0,voltage (model)
-131,12.6,12.6,0.964,"model, 1,000 conditions",0.0,voltage (model)
-132,13.1,13.1,0.95,"model, 1,000 conditions",0.0,a line (model)
-133,12.9,12.9,0.959,"model, 1,000 conditions",0.0,a line (model)
-134,13.1,13.1,0.96,"model, 1,000 conditions",0.0,a line (model)
-136,3.7,3.7,0.951,"model, 1,000 conditions",0.0,voltage (model)
-137,12.2,12.2,0.957,"model, 1,000 conditions",0.0,voltage (model)
-138,3.5,3.5,0.951,"model, 1,000 conditions",0.0,voltage (model)
-140,12.5,12.5,0.957,"model, 1,000 conditions",0.0,voltage (model)
-141,3.3,3.3,0.951,"model, 1,000 conditions",0.0,voltage (model)
-142,13.1,13.1,0.95,"model, 1,000 conditions",0.0,a line (model)
-143,11.4,11.4,0.951,"model, 1,000 conditions",0.0,a line (model)
-144,11.3,11.3,0.951,"model, 1,000 conditions",0.0,voltage (model)
-145,11.3,11.3,0.954,"model, 1,000 conditions",0.0,a line (model)
-146,11.3,11.3,0.952,"model, 1,000 conditions",0.0,a line (model)
-147,3.1,3.1,0.951,"model, 1,000 conditions",0.0,voltage (model)
-148,13.3,13.3,0.951,"model, 1,000 conditions",0.0,a line (model)
-149,3.2,3.2,0.951,"model, 1,000 conditions",0.0,voltage (model)
-150,11.4,11.4,0.952,"model, 1,000 conditions",0.0,a line (model)
-153,5.3,5.3,0.953,"model, 1,000 conditions",0.0,voltage (model)
-155,4.7,4.7,0.951,"model, 1,000 conditions",0.0,voltage (model)
-157,4.8,4.8,0.952,"model, 1,000 conditions",0.0,voltage (model)
-159,4.7,4.7,0.951,"model, 1,000 conditions",0.0,voltage (model)
-161,7.2,7.2,0.951,"model, 1,000 conditions",0.0,voltage (model)
-162,7.4,7.4,0.954,"model, 1,000 conditions",0.0,voltage (model)
-167,5.7,5.7,0.953,"model, 1,000 conditions",0.0,voltage (model)
-168,11.0,11.0,0.95,"model, 1,000 conditions",0.0,voltage (model)
-169,7.5,7.5,0.957,"model, 1,000 conditions",0.0,voltage (model)
-170,3.6,3.6,0.951,"model, 1,000 conditions",0.0,voltage (model)
-171,12.8,12.8,0.956,"model, 1,000 conditions",0.0,a line (model)
-172,12.2,12.2,0.965,"model, 1,000 conditions",0.0,voltage (model)
-173,7.7,7.7,0.954,"model, 1,000 conditions",0.0,voltage (model)
-174,7.5,7.5,0.955,"model, 1,000 conditions",0.0,voltage (model)
-176,6.6,6.6,0.955,"model, 1,000 conditions",0.0,voltage (model)
-178,6.4,6.4,0.954,"model, 1,000 conditions",0.0,voltage (model)
-181,5.5,5.5,0.953,"model, 1,000 conditions",0.0,voltage (model)
-184,5.5,5.5,0.953,"model, 1,000 conditions",0.0,voltage (model)
-186,5.3,5.3,0.953,"model, 1,000 conditions",0.0,voltage (model)
-188,6.4,6.4,0.953,"model, 1,000 conditions",0.0,voltage (model)
-189,4.8,4.8,0.955,"model, 1,000 conditions",0.0,voltage (model)
-190,4.1,4.1,0.951,"model, 1,000 conditions",0.0,voltage (model)
-192,6.7,6.7,0.957,"model, 1,000 conditions",0.0,voltage (model)
-194,5.8,5.8,0.951,"model, 1,000 conditions",0.0,voltage (model)
-195,6.4,6.4,0.954,"model, 1,000 conditions",0.0,voltage (model)
-196,13.2,13.2,0.95,"model, 1,000 conditions",0.0,a line (model)
-197,5.8,5.8,0.953,"model, 1,000 conditions",0.0,voltage (model)
-198,5.6,5.6,0.953,"model, 1,000 conditions",0.0,voltage (model)
-199,5.6,5.6,0.953,"model, 1,000 conditions",0.0,voltage (model)
-200,5.4,5.4,0.953,"model, 1,000 conditions",0.0,voltage (model)
-201,5.6,5.6,0.951,"model, 1,000 conditions",0.0,voltage (model)
-205,6.1,6.1,0.951,"model, 1,000 conditions",0.0,voltage (model)
-207,6.0,6.0,0.951,"model, 1,000 conditions",0.0,voltage (model)
-210,6.0,6.0,0.951,"model, 1,000 conditions",0.0,voltage (model)
-213,5.7,5.7,0.951,"model, 1,000 conditions",0.0,voltage (model)
-215,6.1,6.1,0.954,"model, 1,000 conditions",0.0,voltage (model)
-216,6.3,6.3,0.954,"model, 1,000 conditions",0.0,voltage (model)
-219,4.7,4.7,0.95,"model, 1,000 conditions",0.0,voltage (model)
-221,5.1,5.1,0.951,"model, 1,000 conditions",0.0,voltage (model)
-223,5.6,5.6,0.95,"model, 1,000 conditions",0.0,voltage (model)
-224,6.1,6.1,0.95,"model, 1,000 conditions",0.0,voltage (model)
-227,5.7,5.7,0.95,"model, 1,000 conditions",0.0,voltage (model)
-229,6.0,6.0,0.95,"model, 1,000 conditions",0.0,voltage (model)
-231,5.9,5.9,0.95,"model, 1,000 conditions",0.0,voltage (model)
-235,12.8,12.8,0.955,"model, 1,000 conditions",0.0,a line (model)
-236,4.8,4.8,0.951,"model, 1,000 conditions",0.0,voltage (model)
-237,3.9,3.9,0.952,"model, 1,000 conditions",0.0,voltage (model)
-238,5.2,5.2,0.951,"model, 1,000 conditions",0.0,voltage (model)
-239,4.9,4.9,0.951,"model, 1,000 conditions",0.0,voltage (model)
-240,12.7,12.7,0.954,"model, 1,000 conditions",0.0,a line (model)
-241,12.8,12.8,0.956,"model, 1,000 conditions",0.0,a line (model)
-242,12.6,12.6,0.963,"model, 1,000 conditions",0.0,a line (model)
-243,12.8,12.8,0.957,"model, 1,000 conditions",0.0,a line (model)
-244,12.8,12.8,0.959,"model, 1,000 conditions",0.0,a line (model)
-245,12.8,12.8,0.959,"model, 1,000 conditions",0.0,a line (model)
-246,11.7,11.7,0.956,"model, 1,000 conditions",0.0,voltage (model)
-247,4.5,4.5,0.95,"model, 1,000 conditions",0.0,voltage (model)
-248,12.8,12.8,0.965,"model, 1,000 conditions",0.0,a line (model)
-253,12.8,12.8,0.961,"model, 1,000 conditions",0.0,a line (model)
-269,11.4,11.4,0.95,"model, 1,000 conditions",0.0,a line (model)
-271,9.1,9.1,0.95,"model, 1,000 conditions",0.0,voltage (model)
-273,10.5,10.5,0.95,"model, 1,000 conditions",0.0,voltage (model)
-275,7.3,7.3,0.957,"model, 1,000 conditions",0.0,voltage (model)
-281,9.7,9.7,0.95,"model, 1,000 conditions",0.0,voltage (model)
-285,6.8,6.8,0.955,"model, 1,000 conditions",0.0,voltage (model)
-286,7.0,7.0,0.955,"model, 1,000 conditions",0.0,voltage (model)
-287,7.1,7.1,0.955,"model, 1,000 conditions",0.0,voltage (model)
-288,6.9,6.9,0.955,"model, 1,000 conditions",0.0,voltage (model)
-289,13.0,13.0,0.969,"model, 1,000 conditions",0.0,a line (model)
-290,20.0,20.0,0.999,"model, 1,000 conditions",0.0,
-298,12.8,12.8,0.955,"model, 1,000 conditions",0.0,a line (model)
-301,12.8,12.8,0.955,"model, 1,000 conditions",0.0,voltage (model)
-303,12.9,12.9,0.952,"model, 1,000 conditions",0.0,a line (model)
-304,12.8,12.8,0.96,"model, 1,000 conditions",0.0,a line (model)
-305,8.7,8.7,0.961,"model, 1,000 conditions",0.0,voltage (model)
-312,10.3,10.3,0.953,"model, 1,000 conditions",0.0,voltage (model)
-313,10.0,10.0,0.953,"model, 1,000 conditions",0.0,voltage (model)
-314,12.2,12.2,0.965,"model, 1,000 conditions",0.0,voltage (model)
-315,10.1,10.1,0.953,"model, 1,000 conditions",0.0,voltage (model)
-316,4.9,4.9,0.953,"model, 1,000 conditions",0.0,voltage (model)
-317,6.8,6.8,0.954,"model, 1,000 conditions",0.0,voltage (model)
-319,20.0,20.0,0.996,"model, 1,000 conditions",0.0,
+0,12.8,12.6,0.96,"solver, 50 new conditions",0.2,Line 40
+1,12.4,12.4,0.98,"solver, 50 new conditions",0.0,Line 39
+2,12.4,12.4,0.98,"solver, 50 new conditions",0.0,Line 39
+3,12.4,12.4,0.98,"solver, 50 new conditions",0.0,Line 39
+4,12.8,12.6,0.96,"solver, 50 new conditions",0.2,Line 40
+5,12.4,12.4,1.0,"solver, 50 new conditions",0.0,a line (model)
+6,20.0,20.0,1.0,"solver, 50 new conditions",0.0,
+7,20.0,20.0,1.0,"solver, 50 new conditions",0.0,
+8,12.8,12.6,0.98,"solver, 50 new conditions",0.2,Line 40
+29,20.0,20.0,0.96,"solver, 50 new conditions",0.0,
+30,20.0,20.0,0.98,"solver, 50 new conditions",0.0,
+31,11.3,11.1,0.96,"solver, 50 new conditions",0.2,Line 27
+32,8.4,8.2,0.98,"solver, 50 new conditions",0.2,voltage
+33,9.5,9.3,0.96,"solver, 50 new conditions",0.2,voltage
+34,9.5,8.8,0.98,"solver, 50 new conditions",0.7,voltage
+35,14.8,14.6,0.98,"solver, 50 new conditions",0.2,Line 161
+36,4.1,3.9,0.98,"solver, 50 new conditions",0.2,voltage
+37,12.8,12.7,0.98,"solver, 50 new conditions",0.1,Line 181
+38,6.9,6.9,0.96,"solver, 50 new conditions",0.0,voltage
+39,20.0,20.0,1.0,"solver, 50 new conditions",0.0,
+40,4.8,4.5,0.96,"solver, 50 new conditions",0.3,voltage
+41,12.8,12.8,0.98,"solver, 50 new conditions",0.0,Line 181
+42,5.3,5.1,0.98,"solver, 50 new conditions",0.2,voltage
+43,12.4,12.4,0.98,"solver, 50 new conditions",0.0,Line 181
+44,6.5,6.5,0.98,"solver, 50 new conditions",0.0,voltage
+45,11.4,11.0,0.96,"solver, 50 new conditions",0.4,Line 179
+46,7.8,7.7,0.98,"solver, 50 new conditions",0.1,voltage
+47,11.3,11.0,0.96,"solver, 50 new conditions",0.3,Line 179
+48,5.5,5.5,0.98,"solver, 50 new conditions",0.0,voltage
+49,11.3,11.0,0.96,"solver, 50 new conditions",0.3,Line 179
+50,5.6,5.5,0.98,"solver, 50 new conditions",0.1,voltage
+51,5.1,5.0,0.96,"solver, 50 new conditions",0.1,voltage
+52,11.3,11.0,0.96,"solver, 50 new conditions",0.3,Line 179
+53,7.2,7.2,0.98,"solver, 50 new conditions",0.0,voltage
+54,10.8,10.8,0.96,"solver, 50 new conditions",0.0,voltage
+55,11.4,11.0,0.96,"solver, 50 new conditions",0.4,Line 192
+56,6.3,6.3,0.96,"solver, 50 new conditions",0.0,voltage
+57,7.0,7.0,0.98,"solver, 50 new conditions",0.0,voltage
+64,4.2,4.0,0.98,"solver, 50 new conditions",0.2,voltage
+65,4.1,4.0,0.96,"solver, 50 new conditions",0.1,voltage
+71,20.0,20.0,1.0,"solver, 50 new conditions",0.0,
+72,13.0,12.7,0.96,"solver, 50 new conditions",0.3,Line 54
+73,20.0,20.0,1.0,"solver, 50 new conditions",0.0,
+74,13.1,12.8,0.96,"solver, 50 new conditions",0.3,Line 54
+75,13.0,12.7,0.96,"solver, 50 new conditions",0.3,Line 54
+76,8.6,8.6,0.98,"solver, 50 new conditions",0.0,voltage
+77,14.8,14.6,0.98,"solver, 50 new conditions",0.2,Line 161
+78,14.8,14.6,0.98,"solver, 50 new conditions",0.2,Line 161
+79,4.3,4.1,0.98,"solver, 50 new conditions",0.2,voltage
+80,20.0,20.0,0.98,"solver, 50 new conditions",0.0,
+81,12.8,12.7,0.98,"solver, 50 new conditions",0.1,Line 181
+82,4.3,4.2,0.96,"solver, 50 new conditions",0.1,voltage
+83,12.9,12.9,0.96,"solver, 50 new conditions",0.0,Line 181
+84,6.2,6.1,0.98,"solver, 50 new conditions",0.1,voltage
+85,7.8,7.8,0.96,"solver, 50 new conditions",0.0,voltage
+86,20.0,20.0,1.0,"solver, 50 new conditions",0.0,
+94,11.1,11.1,0.96,"solver, 50 new conditions",0.0,voltage
+95,11.5,11.5,0.96,"solver, 50 new conditions",0.0,voltage
+98,9.8,9.8,0.96,"solver, 50 new conditions",0.0,voltage
+100,10.1,10.1,0.98,"solver, 50 new conditions",0.0,voltage
+101,12.3,12.3,0.98,"solver, 50 new conditions",0.0,Line 54
+102,10.4,10.4,0.98,"solver, 50 new conditions",0.0,voltage
+103,11.6,11.1,0.96,"solver, 50 new conditions",0.5,Line 27
+104,11.6,11.1,0.96,"solver, 50 new conditions",0.5,Line 27
+106,11.5,11.1,0.96,"solver, 50 new conditions",0.4,Line 27
+107,9.8,9.8,0.96,"solver, 50 new conditions",0.0,voltage
+108,11.5,11.0,0.96,"solver, 50 new conditions",0.5,Line 27
+109,5.4,5.2,0.96,"solver, 50 new conditions",0.2,voltage
+110,11.5,11.1,0.96,"solver, 50 new conditions",0.4,Line 27
+111,3.5,3.4,0.96,"solver, 50 new conditions",0.1,voltage
+116,3.6,3.4,0.98,"solver, 50 new conditions",0.2,voltage
+117,13.3,12.9,0.96,"solver, 50 new conditions",0.4,Line 175
+118,12.4,12.4,0.98,"solver, 50 new conditions",0.0,Line 175
+119,12.4,12.4,1.0,"solver, 50 new conditions",0.0,a line (model)
+120,13.3,12.9,0.96,"solver, 50 new conditions",0.4,Line 175
+126,20.0,20.0,0.96,"solver, 50 new conditions",0.0,
+129,6.6,6.6,0.96,"solver, 50 new conditions",0.0,voltage
+131,12.6,12.6,0.96,"solver, 50 new conditions",0.0,voltage
+132,13.1,13.0,0.98,"solver, 50 new conditions",0.1,Line 181
+133,12.9,12.7,0.98,"solver, 50 new conditions",0.2,Line 39
+134,13.1,13.0,0.96,"solver, 50 new conditions",0.1,Line 181
+136,3.7,3.6,0.96,"solver, 50 new conditions",0.1,voltage
+137,12.2,12.2,0.98,"solver, 50 new conditions",0.0,voltage
+138,3.5,3.4,0.96,"solver, 50 new conditions",0.1,voltage
+140,12.5,12.5,0.96,"solver, 50 new conditions",0.0,voltage
+141,3.3,3.1,0.98,"solver, 50 new conditions",0.2,voltage
+142,13.1,12.9,0.98,"solver, 50 new conditions",0.2,Line 181
+143,11.4,10.9,0.96,"solver, 50 new conditions",0.5,Line 179
+144,11.3,11.2,0.96,"solver, 50 new conditions",0.1,voltage
+145,11.3,10.9,0.96,"solver, 50 new conditions",0.4,Line 179
+146,11.3,10.9,0.96,"solver, 50 new conditions",0.4,Line 179
+147,3.1,3.0,0.96,"solver, 50 new conditions",0.1,voltage
+148,13.3,12.9,0.96,"solver, 50 new conditions",0.4,Line 175
+149,3.2,3.0,0.98,"solver, 50 new conditions",0.2,voltage
+150,11.4,11.0,0.96,"solver, 50 new conditions",0.4,Line 179
+153,5.3,5.3,0.96,"solver, 50 new conditions",0.0,voltage
+155,4.7,4.6,0.96,"solver, 50 new conditions",0.1,voltage
+157,4.8,4.7,0.96,"solver, 50 new conditions",0.1,voltage
+159,4.7,4.6,0.96,"solver, 50 new conditions",0.1,voltage
+161,7.2,7.2,0.96,"solver, 50 new conditions",0.0,voltage
+162,7.4,7.4,0.98,"solver, 50 new conditions",0.0,voltage
+167,5.7,5.7,0.96,"solver, 50 new conditions",0.0,voltage
+168,11.0,11.0,0.96,"solver, 50 new conditions",0.0,voltage
+169,7.5,7.5,0.96,"solver, 50 new conditions",0.0,voltage
+170,3.6,3.5,0.96,"solver, 50 new conditions",0.1,voltage
+171,12.8,12.6,0.98,"solver, 50 new conditions",0.2,Line 40
+172,12.2,12.2,0.96,"solver, 50 new conditions",0.0,voltage
+173,7.7,7.7,0.98,"solver, 50 new conditions",0.0,voltage
+174,7.5,7.5,0.98,"solver, 50 new conditions",0.0,voltage
+176,6.6,6.6,0.96,"solver, 50 new conditions",0.0,voltage
+178,6.4,6.3,0.96,"solver, 50 new conditions",0.1,voltage
+181,5.5,5.4,0.96,"solver, 50 new conditions",0.1,voltage
+184,5.5,5.4,0.96,"solver, 50 new conditions",0.1,voltage
+186,5.3,5.2,0.96,"solver, 50 new conditions",0.1,voltage
+188,6.4,6.4,0.96,"solver, 50 new conditions",0.0,voltage
+189,4.8,4.6,0.98,"solver, 50 new conditions",0.2,voltage
+190,4.1,3.9,0.98,"solver, 50 new conditions",0.2,voltage
+192,6.7,6.7,0.96,"solver, 50 new conditions",0.0,voltage
+194,5.8,5.6,0.96,"solver, 50 new conditions",0.2,voltage
+195,6.4,6.3,0.96,"solver, 50 new conditions",0.1,voltage
+196,13.2,12.8,0.96,"solver, 50 new conditions",0.4,Line 54
+197,5.8,5.8,0.96,"solver, 50 new conditions",0.0,voltage
+198,5.6,5.5,0.96,"solver, 50 new conditions",0.1,voltage
+199,5.6,5.6,0.96,"solver, 50 new conditions",0.0,voltage
+200,5.4,5.4,0.96,"solver, 50 new conditions",0.0,voltage
+201,5.6,5.4,0.96,"solver, 50 new conditions",0.2,voltage
+205,6.1,5.9,0.96,"solver, 50 new conditions",0.2,voltage
+207,6.0,5.9,0.96,"solver, 50 new conditions",0.1,voltage
+210,6.0,6.0,0.98,"solver, 50 new conditions",0.0,voltage
+213,5.7,5.5,0.96,"solver, 50 new conditions",0.2,voltage
+215,6.1,6.1,0.96,"solver, 50 new conditions",0.0,voltage
+216,6.3,6.1,0.96,"solver, 50 new conditions",0.2,voltage
+219,4.7,4.7,0.96,"solver, 50 new conditions",0.0,voltage
+221,5.1,5.0,0.96,"solver, 50 new conditions",0.1,voltage
+223,5.6,5.6,0.96,"solver, 50 new conditions",0.0,voltage
+224,6.1,6.1,0.96,"solver, 50 new conditions",0.0,voltage
+227,5.7,5.7,0.96,"solver, 50 new conditions",0.0,voltage
+229,6.0,6.0,0.96,"solver, 50 new conditions",0.0,voltage
+231,5.9,5.9,0.96,"solver, 50 new conditions",0.0,voltage
+235,12.8,12.8,0.98,"solver, 50 new conditions",0.0,Line 181
+236,4.8,4.8,0.96,"solver, 50 new conditions",0.0,voltage
+237,3.9,3.8,0.96,"solver, 50 new conditions",0.1,voltage
+238,5.2,5.0,0.96,"solver, 50 new conditions",0.2,voltage
+239,4.9,4.9,0.96,"solver, 50 new conditions",0.0,voltage
+240,12.7,12.5,0.98,"solver, 50 new conditions",0.2,Line 40
+241,12.8,12.6,0.96,"solver, 50 new conditions",0.2,Line 40
+242,12.6,12.5,0.96,"solver, 50 new conditions",0.1,Line 39
+243,12.8,12.5,0.98,"solver, 50 new conditions",0.3,Line 39
+244,12.8,12.5,0.98,"solver, 50 new conditions",0.3,Line 39
+245,12.8,12.5,0.98,"solver, 50 new conditions",0.3,Line 39
+246,11.7,11.6,0.96,"solver, 50 new conditions",0.1,voltage
+247,4.5,4.3,0.96,"solver, 50 new conditions",0.2,voltage
+248,12.8,12.7,0.98,"solver, 50 new conditions",0.1,Line 39
+253,12.8,12.7,0.96,"solver, 50 new conditions",0.1,Line 40
+269,11.4,11.0,0.96,"solver, 50 new conditions",0.4,Line 27
+271,9.1,9.1,0.96,"solver, 50 new conditions",0.0,voltage
+273,10.5,10.4,0.96,"solver, 50 new conditions",0.1,voltage
+275,7.3,7.3,0.96,"solver, 50 new conditions",0.0,voltage
+281,9.7,9.6,0.96,"solver, 50 new conditions",0.1,voltage
+285,6.8,6.8,0.96,"solver, 50 new conditions",0.0,voltage
+286,7.0,7.0,0.96,"solver, 50 new conditions",0.0,voltage
+287,7.1,7.1,0.96,"solver, 50 new conditions",0.0,voltage
+288,6.9,6.9,0.96,"solver, 50 new conditions",0.0,voltage
+289,13.0,12.7,0.96,"solver, 50 new conditions",0.3,Line 54
+290,20.0,20.0,1.0,"solver, 50 new conditions",0.0,
+298,12.8,12.6,0.98,"solver, 50 new conditions",0.2,Line 39
+301,12.8,12.8,0.96,"solver, 50 new conditions",0.0,Line 40
+303,12.9,12.8,0.96,"solver, 50 new conditions",0.1,Line 40
+304,12.8,12.8,0.96,"solver, 50 new conditions",0.0,Line 40
+305,8.7,8.7,0.98,"solver, 50 new conditions",0.0,voltage
+312,10.3,10.3,0.96,"solver, 50 new conditions",0.0,voltage
+313,10.0,10.0,0.96,"solver, 50 new conditions",0.0,voltage
+314,12.2,12.2,0.96,"solver, 50 new conditions",0.0,voltage
+315,10.1,10.1,0.96,"solver, 50 new conditions",0.0,voltage
+316,4.9,4.8,0.96,"solver, 50 new conditions",0.1,voltage
+317,6.8,6.8,0.96,"solver, 50 new conditions",0.0,voltage
+319,20.0,20.0,1.0,"solver, 50 new conditions",0.0,

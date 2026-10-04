@@ -34,9 +34,11 @@ The capacity-per-condition run below is paused at 4 of 44 conditions
 - Tests: random 80/20 split, with a "close to a limit" breakdown, and
   capacity against find_capacity at the 4 corner conditions
   (results/model_report.md, model_vs_solver.png).
-- Step 6 (capacity95.py): 200 sampled conditions; the model proposes
-  each bus's 95% size, the real power flow rechecks it under all 200
-  and steps 0.1 MW up or down until exact (results/capacity95.csv).
+- Step 6 (capacity95.py): the model finds each bus's capacity under
+  1,000 sampled conditions and takes the size that fits in 95%; then
+  (--recheck) the real power flow tests it on 50 new conditions,
+  lowering 0.1 MW while more than 5% fail (results/capacity95.csv,
+  capacity95_recheck.json: 96 of 177 buses lowered).
 
 Goal: a model that predicts a bus's hosting capacity under any grid
 condition in milliseconds, so step 6 can sample hundreds of conditions per
