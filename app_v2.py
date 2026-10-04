@@ -14,6 +14,7 @@ import pandas as pd
 import streamlit as st
 
 import ml
+import sunlight
 from capacity_data import CAPACITY95_FILE, CAPACITY_FILE, read_capacity, read_capacity95
 from control_room import (GREEN, ORANGE, RED, board_layout, capacity_board, explore_board,
                           flows_outward, path_lines, show_board, substation_of)
@@ -107,6 +108,15 @@ def model_and_features():
 
 def file_time(path):
     return path.stat().st_mtime if path.exists() else 0
+
+
+# Kept on disk, so a bus and size checked once comes back instantly, even
+# after the app restarts. The sunlight file's time is part of the key.
+@st.cache_data(persist="disk", show_spinner=False)
+def sunlight_year(bus, mw, sunlight_file_time):
+    """A year of real 2024 sunlight at `bus` with `mw` of solar (sunlight.py)."""
+    models, features = model_and_features()
+    return sunlight.year_check(bus, mw, models, features)
 
 
 # ---------------------------------------------------------------- look
@@ -375,6 +385,23 @@ def try_a_project():
                 f'<div class="v">{text}<span>{limit}</span></div>'
                 for name, sub, v, text, limit, w, lim in rows)
             html(f'<div class="hr-lamps">{cells}</div>')
+
+        # A year of real satellite sunlight for this bus and size.
+        if st.button("Check a year of real sunlight", key="sun_check"):
+            st.session_state.sun_request = (bus, mw)
+        if st.session_state.get("sun_request") == (bus, mw):
+            if not sunlight.SUNLIGHT_FILE.exists():
+                html('<div class="hr-note">No sunlight data yet: run '
+                     '<code>py -3.14 fetch_sunlight.py</code> once, with internet.</div>')
+            elif mw == 0:
+                html('<div class="hr-note">Add some solar first.</div>')
+            else:
+                with st.spinner("Checking every daylight hour of 2024..."):
+                    r = sunlight_year(bus, mw, file_time(sunlight.SUNLIGHT_FILE))
+                html(f'<div class="hr-where">With real 2024 sunlight (NASA satellite data), '
+                     f'<b>{mw:g} MW</b> at bus {bus} would need curtailing in '
+                     f'<b>{r["solver_fail_hours"]:,}</b> of {r["daylight_hours"]:,} daylight '
+                     f'hours.</div>')
 
     c1, c2, c3 = st.columns([1, 1.2, 1.2], gap="large")
     with c1:

@@ -159,6 +159,26 @@ results depend on the order above.
 | `test_engine.py`, `test_capacity.py` | tests |
 | `decisions.md`, `PLAN.md` | project decisions and build plan |
 
+## Real sunlight (ALEASAT Earth Observation track)
+
+`fetch_sunlight.py` downloads 2024 hourly all-sky surface solar
+irradiance (ALLSKY_SFC_SW_DWN, satellite-based) for the middle of the grid
+(48.4153 N, 7.8283 E) from the NASA POWER API and saves it to
+`results/sunlight_2024.csv` (8,784 hours, 4,526 of them daylight). Run it
+once, with internet; the apps only read the file.
+
+`sunlight.py` checks a project against every daylight hour: the sun share
+s is that hour's irradiance over the year's brightest hour (903 W/m2,
+25 June); the project makes size x s, the existing generators run at
+0.8 x s, and load is 10% (a deliberately pessimistic case). The ML model
+flags the hours that break a limit and the real power flow rechecks each
+one. In the second interface (`run_v2.cmd`), "Check a year of real
+sunlight" under Try a project reports the result, for example: 3 MW at
+bus 147 would need curtailing in 159 of 4,526 daylight hours.
+
+Data: NASA Langley Research Center POWER Project, funded through the
+NASA Earth Science Directorate Applied Science Program.
+
 ## Assumptions and limits
 
 - Only an **upper** voltage limit (1.04 pu) is checked. Solar only raises
