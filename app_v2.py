@@ -20,6 +20,7 @@ import sunlight
 from sunny_day import day_profile, play_day
 from hyperbolic import disk_data, disk_layout, measure_fit, show_disk
 from globe import show_globe
+from motion import start_motion
 from capacity_data import CAPACITY95_FILE, CAPACITY_FILE, read_capacity, read_capacity95
 from control_room import (GREEN, ORANGE, RED, SUN, board_layout, capacity_board, explore_board,
                           flows_outward, path_lines, show_board, substation_of)
@@ -364,6 +365,52 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-count.plain .big { color: var(--ink); }
 .st-key-view button { padding-left: .55rem; padding-right: .55rem; }
 .st-key-view button p { font-size: .9rem; white-space: nowrap; }
+/* Opening: a branded veil while the first page is built, then the blocks rise in, one after
+   another. motion.py says when the page is ready; without it, the veil lifts after 6 s. */
+.hr-veil { position: fixed; inset: 0; z-index: 1000002; background: #0A0A0A; display: flex;
+           align-items: center; justify-content: center; pointer-events: none;
+           animation: hrVeilLate .6s ease 6s forwards; }
+html.hr-ready .hr-veil { animation: hrVeilGo .7s ease .2s forwards; }
+.hr-veil .mark { display: flex; align-items: center; gap: 24px;
+                 animation: hrMarkIn .8s cubic-bezier(.2,.7,.2,1) .05s backwards; }
+.hr-veil .mark svg { width: 96px; height: auto; }
+.hr-veil .word { font-size: 2.7rem; font-weight: 600; color: #FFFFFF; line-height: 1; }
+.hr-veil .sub { font-size: 1rem; color: #ADADAD; margin-top: 12px; }
+.hr-veil .load { height: 2px; width: 200px; margin-top: 18px; background: #1F1F1F; overflow: hidden;
+                 border-radius: 2px; }
+.hr-veil .load i { display: block; height: 100%; width: 38%; background: #63C132; border-radius: 2px;
+                   animation: hrLoad 1.15s ease-in-out infinite; }
+@keyframes hrVeilLate { to { opacity: 0; visibility: hidden; } }
+@keyframes hrVeilGo { to { opacity: 0; visibility: hidden; } }
+@keyframes hrMarkIn { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+@keyframes hrLoad { from { transform: translateX(-100%); } to { transform: translateX(265%); } }
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child) {
+  animation: hrRiseLate .7s cubic-bezier(.2,.7,.2,1) 4s backwards; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child) {
+  animation: hrRise .8s cubic-bezier(.2,.7,.2,1) .45s backwards; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(3) { animation-delay: .56s; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(4) { animation-delay: .67s; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(5) { animation-delay: .78s; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(6) { animation-delay: .89s; }
+html.hr-ready [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :nth-child(n+7) { animation-delay: 1s; }
+html.hr-settled [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > :not(:first-child) {
+  animation-duration: .42s; animation-delay: 0s; }
+@keyframes hrRise { from { opacity: 0; transform: translateY(18px); } }
+@keyframes hrRiseLate { from { opacity: 0; transform: translateY(18px); } }
+/* Panels further down rise into view as you scroll to them. */
+@supports (animation-timeline: view()) {
+  .hr-count, .hr-sky, .hr-lamps, .hr-tiles, .hr-race, .hr-plot, .hr-globe, .st-key-controls,
+  .st-key-orbit_text .hr-copy {
+    animation: hrReveal linear both; animation-timeline: view(); animation-range: entry 0% cover 18%; }
+}
+@keyframes hrReveal { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+.st-key-hr_motion { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .hr-veil { display: none; }
+  [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > *, .hr-count, .hr-sky,
+  .hr-lamps, .hr-tiles, .hr-race, .hr-plot, .hr-globe, .st-key-controls, .st-key-orbit_text .hr-copy {
+    animation: none !important; }
+}
 </style>
 """
 
@@ -381,6 +428,11 @@ LOGO = """<svg width="44" height="34" viewBox="0 0 44 34" aria-hidden="true">
 
 def clean(markup):
     return re.sub(r"\s*\n\s*", " ", markup).strip()
+
+
+VEIL = clean(f"""<div class="hr-veil" aria-hidden="true"><div><div class="mark">{LOGO}
+<div><div class="word">Headroom</div><div class="sub">Finding room for new solar on the grid</div>
+<div class="load"><i></i></div></div></div></div></div>""")
 
 
 def html(markup):
@@ -494,7 +546,7 @@ def lamp_colour(value, warn_from, limit):
 
 # ---------------------------------------------------------------- page
 
-st.markdown(CSS, unsafe_allow_html=True)
+st.markdown(CSS + VEIL, unsafe_allow_html=True)
 
 net0 = base_grid()
 board = layout()
@@ -1201,3 +1253,5 @@ elif view == "Proof":
     proof()
 else:
     try_a_project()
+
+start_motion()  # last, so it runs once the page above exists
