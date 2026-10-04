@@ -238,12 +238,28 @@ def show_headline(saved):
     if saved95 is None:
         st.metric(label, f"{count_can_take(saved, HEADLINE_MW)} of {len(saved)}")
         return
+    # Both numbers; the one the Capacity map is showing gets a border.
+    in_95 = showing_95()
     st.markdown(f"**{label}**")
     c1, c2 = st.columns(2)
-    c1.metric("In 95% of grid conditions (solver-checked)",
-              f"{count_can_take(saved95, HEADLINE_MW)} of {len(saved95)}")
-    c2.metric("On today's grid (low load, high existing solar)",
-              f"{count_can_take(saved, HEADLINE_MW)} of {len(saved)}")
+    c1.metric("In 95% of grid conditions (solver-checked)"
+              + (", shown on the map" if in_95 else ""),
+              f"{count_can_take(saved95, HEADLINE_MW)} of {len(saved95)}",
+              border=in_95)
+    c2.metric("Snapshot: today's grid (low load, high existing solar)"
+              + ("" if in_95 else ", shown on the map"),
+              f"{count_can_take(saved, HEADLINE_MW)} of {len(saved)}",
+              border=not in_95)
+
+
+# The snapshot/95% toggle. It sits in the Capacity view, but the headline
+# reads it too, so both switch together.
+CAP_95 = "95% of conditions"
+CAP_SNAPSHOT = "Snapshot (today's grid)"
+
+
+def showing_95():
+    return st.session_state.get("cap_map", CAP_95) == CAP_95
 
 
 def show_capacity_view(saved, error):
@@ -262,11 +278,9 @@ def show_capacity_view(saved, error):
             "`results/capacity.csv` exists."
         )
     elif saved95 is not None:
-        choice = st.radio(
-            "Capacity map", ["In 95% of grid conditions", "On today's grid"],
-            horizontal=True, key="cap_map",
-        )
-        in_95 = choice.startswith("In 95%")
+        # Changing this reruns the page, so the headline above switches too.
+        st.radio("Capacity", [CAP_95, CAP_SNAPSHOT], horizontal=True, key="cap_map")
+        in_95 = showing_95()
         capacity = saved95 if in_95 else saved
     else:
         capacity = saved
