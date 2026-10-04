@@ -20,6 +20,7 @@ from engine import MAX_LOADING_PERCENT, MAX_VOLTAGE_PU
 GREEN = "#63C132"
 ORANGE = "#FFA61A"
 RED = "#FF4D57"
+SUN = "#FFD34D"  # the 3% rule: capacity from a year of satellite sunlight
 LINE_DIM = "#333333"
 BUSY_FROM = 70.0  # line loading (%) from which a line shows orange
 WARN_BAND_PU = 0.01  # a bus within this of the voltage limit shows orange
@@ -267,13 +268,18 @@ def explore_board(net, layout, selected, mw, solve_ms=None):
             "legend": legend, "foot": foot}
 
 
-def capacity_board(net, layout, size, firm, flexible, selected):
+def capacity_board(net, layout, size, firm, flexible, selected, kind="flex", gains=None):
     """Board data for the Capacity map: each bus outlined green (takes
-    `size` MW firm, even in the worst case), orange (only with a flexible
-    connection, in 95% of conditions) or red (can't). The bar in each bus
-    shows firm (green) and flexible (orange) capacity as a share of `size`.
-    `firm` and `flexible` map bus -> MW."""
+    `size` MW firm, even in the worst case), then orange (kind "flex": only
+    with a flexible connection, in 95% of conditions) or yellow (kind
+    "rule": only under the 3% rule, with up to 3% of its yearly energy
+    curtailed), or red (can't). The bar in each bus shows firm (green) and
+    the second layer's capacity as a share of `size`. `firm` and `flexible`
+    (the second layer) map bus -> MW; `gains` maps bus -> MWh a year gained
+    over firm under the 3% rule."""
     where = substation_of(layout)
+    rule = kind == "rule"
+    second_colour = SUN if rule else ORANGE
     buses = []
     for b in layout["buses"]:
         f = float(firm.get(b["id"], 0.0))
@@ -281,20 +287,33 @@ def capacity_board(net, layout, size, firm, flexible, selected):
         if size <= f + 1e-9:
             state, word = "firm", "Firm"
         elif size <= x + 1e-9:
-            state, word = "flex", "Flexible connection"
+            state, word = (kind, "Under the 3% rule") if rule else (kind, "Flexible connection")
         else:
             state, word = "cant", "Can't take it"
         sub, hops = where[b["id"]]
+        if rule:
+            gain = float((gains or {}).get(b["id"], 0.0))
+            extra = f" (+{gain:,.0f} MWh a year)" if x > f + 1e-9 else ""
+            detail = f"Firm {f:.1f} MW, 3% rule {x:.1f} MW{extra}, {hops} lines from {sub}"
+        else:
+            detail = f"Firm {f:.1f} MW, flexible {x:.1f} MW, {hops} lines from {sub}"
         buses.append({"bar": round(min(f / size, 1.0), 3), "bar2": round(min(x / size, 1.0), 3),
-                      "colour": GREEN, "state": state,
-                      "title": f"Bus {b['id']}: {word}",
-                      "detail": f"Firm {f:.1f} MW, flexible {x:.1f} MW, {hops} lines from {sub}"})
-    legend = [
-        {"tile": GREEN, "label": "Firm: fits even in the worst case"},
-        {"tile": ORANGE, "label": "Flexible: fits in 95% of conditions"},
-        {"tile": RED, "label": "Can't take it"},
-        {"bar": True, "label": "Bar: firm and flexible capacity against the project size"},
-    ]
+                      "colour": GREEN, "colour2": second_colour, "state": state,
+                      "title": f"Bus {b['id']}: {word}", "detail": detail})
+    if rule:
+        legend = [
+            {"tile": GREEN, "label": "Firm: fits even in the worst case"},
+            {"tile": SUN, "label": "3% rule: fits if up to 3% of its yearly energy is curtailed"},
+            {"tile": RED, "label": "Can't take it"},
+            {"bar": True, "colour2": SUN, "label": "Bar: firm and 3% rule capacity against the project size"},
+        ]
+    else:
+        legend = [
+            {"tile": GREEN, "label": "Firm: fits even in the worst case"},
+            {"tile": ORANGE, "label": "Flexible: fits in 95% of conditions"},
+            {"tile": RED, "label": "Can't take it"},
+            {"bar": True, "label": "Bar: firm and flexible capacity against the project size"},
+        ]
     return {"layout": layout, "mode": "capacity", "selected": int(selected),
             "label": f"Bus {selected}", "buses": buses, "lines": _flows(net, layout, dim=True),
             "subs": _substations(net, layout), "legend": legend,
@@ -325,8 +344,9 @@ CSS = """
 .bus.over .tile { stroke: #FF4D57; stroke-width: 2.6; filter: drop-shadow(0 0 7px rgba(255,77,87,.8)); }
 .bus.firm .tile { stroke: #63C132; fill: #12230B; }
 .bus.flex .tile { stroke: #FFA61A; fill: #2E1E05; }
+.bus.rule .tile { stroke: #FFD34D; fill: #2A2306; }
 .bus.cant .tile { stroke: #FF4D57; fill: #33100F; }
-.bus.sel.firm .tile, .bus.sel.flex .tile, .bus.sel.cant .tile { stroke-width: 3; }
+.bus.sel.firm .tile, .bus.sel.flex .tile, .bus.sel.rule .tile, .bus.sel.cant .tile { stroke-width: 3; }
 .sub rect { fill: var(--tile); stroke: #A6A6A6; stroke-width: 1.8; }
 .sub.over rect { stroke: #FF4D57; }
 .sub .name { fill: #FFFFFF; font-size: 15px; font-weight: 600; text-anchor: middle; }
@@ -527,7 +547,7 @@ function paint(state, layout, buses, lines, subs, capacity) {
   });
   layout.buses.forEach((b, i) => {
     const info = buses[i], node = state.buses[b.id];
-    for (const k of ["warn", "over", "firm", "flex", "cant", "idle"]) {
+    for (const k of ["warn", "over", "firm", "flex", "rule", "cant", "idle"]) {
       node.g.classList.toggle(k, info.state === k);
     }
     // Always show at least a dot, like a gauge needle resting at zero.
@@ -535,6 +555,7 @@ function paint(state, layout, buses, lines, subs, capacity) {
     node.bar.setAttribute("fill", info.colour);
     const two = info.bar2 !== undefined;
     node.bar2.setAttribute("width", two ? Math.max(3.5, state.BW * info.bar2) : 0);
+    node.bar2.setAttribute("fill", info.colour2 || "#FFA61A");
   });
 }
 
@@ -553,7 +574,11 @@ function update(state, data) {
     const sw = document.createElement("i");
     if (item.line) { sw.className = "ln-sw"; sw.style.background = item.line; }
     else if (item.tile) { sw.className = "tile-sw"; sw.style.borderColor = item.tile; }
-    else if (item.bar) { sw.className = "bar-sw"; }
+    else if (item.bar) {
+      sw.className = "bar-sw";
+      if (item.colour2) sw.style.background =
+        `linear-gradient(90deg, #63C132 0 45%, ${item.colour2} 45% 70%, #383838 70%)`;
+    }
     else if (item.dots) { sw.className = "dot-sw"; }
     span.appendChild(sw);
     span.appendChild(document.createTextNode(item.label));

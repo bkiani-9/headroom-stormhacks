@@ -18,8 +18,10 @@ import sunlight
 from sunny_day import day_profile, play_day
 from hyperbolic import disk_data, disk_layout, measure_fit, show_disk
 from capacity_data import CAPACITY95_FILE, CAPACITY_FILE, read_capacity, read_capacity95
-from control_room import (GREEN, ORANGE, RED, board_layout, capacity_board, explore_board,
+from control_room import (GREEN, ORANGE, RED, SUN, board_layout, capacity_board, explore_board,
                           flows_outward, path_lines, show_board, substation_of)
+from peak_shaving import CHECK_FILE as RULE_CHECK_FILE, OUT_FILE as RULE_FILE
+from capacity import MAX_SEARCH_MW
 from engine import (MAX_LOADING_PERCENT, MAX_VOLTAGE_PU, add_project, check,
                     farthest_bus, load_grid, solve)
 
@@ -43,6 +45,7 @@ CONDITION_NOTES = {
     "Best case": "Load at 60% of peak, other generators off: the most room for new solar.",
 }
 VIEWS = ["Try a project", "Capacity map", "Electrical space", "Proof"]
+LAYERS = ["Firm and flexible", "Firm and the 3% rule"]  # the Capacity map's two layers
 DEMO_MW = 3.0  # what the one-click button adds
 MAP_SIZE_MW = 5.0  # starting project size on the Capacity map
 RACE_CONDITIONS = 100  # grid conditions per bus in the speed test
@@ -99,7 +102,7 @@ def disk():
 
 @st.cache_data
 def hyperbolic_fit():
-    """(error of the hyperbolic drawing, error of the best flat drawing)."""
+    """(error of the hyperbolic drawing, error of a flat drawing fitted to the same distances)."""
     return measure_fit(base_grid(), layout())
 
 
@@ -109,17 +112,31 @@ def far_bus():
 
 
 @st.cache_data
-def capacities(firm_changed, flex_changed):
-    """Firm (worst case, results/capacity.csv) and flexible (95% of
-    conditions, results/capacity95.csv) capacity per bus, in one table."""
+def capacities(firm_changed, flex_changed, rule_changed):
+    """Firm (worst case, results/capacity.csv), flexible (95% of
+    conditions, results/capacity95.csv) and, if peak_shaving.py has run,
+    3% rule (results/peak_shaving.csv) capacity per bus, in one table."""
     firm = read_capacity()
     flex = read_capacity95()
-    return pd.DataFrame({
+    table = pd.DataFrame({
         "firm": firm.capacity_mw,
         "firm_limit": firm.limit,
         "flex": np.maximum(flex.capacity_mw.reindex(firm.index).fillna(0), firm.capacity_mw),
         "pass_share": flex.pass_share.reindex(firm.index),
     })
+    if RULE_FILE.exists():
+        rule = pd.read_csv(RULE_FILE).set_index("bus").reindex(firm.index)
+        table["rule"] = np.maximum(rule.rule_mw.fillna(0), firm.capacity_mw)
+        table["rule_share"] = rule.curtailed_share.fillna(0)
+        table["rule_hours"] = rule.curtailed_hours.fillna(0).astype(int)
+        table["rule_gain"] = rule.gain_mwh.fillna(0)
+    return table
+
+
+@st.cache_data
+def rule_check(changed):
+    """peak_shaving.py's power flow recheck (results/peak_shaving_check.json)."""
+    return json.loads(RULE_CHECK_FILE.read_text()) if RULE_CHECK_FILE.exists() else None
 
 
 @st.cache_resource
@@ -196,6 +213,8 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-count.firm .big { color: #7EDB4C; }
 .hr-count.flex { border-color: rgba(255,166,26,.8); }
 .hr-count.flex .big { color: var(--orange); }
+.hr-count.rule { border-color: rgba(255,211,77,.8); }
+.hr-count.rule .big { color: #FFD34D; }
 .hr-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .hr-tile { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--edge); background: var(--panel); }
 .hr-tile .big { font-size: 2.2rem; font-weight: 600; line-height: 1.05; font-variant-numeric: tabular-nums; color: var(--ink); }
@@ -259,12 +278,13 @@ board = layout()
 mv_buses = [int(b) for b in net0.bus.index[net0.bus.vn_kv == 20]]
 farthest = far_bus()
 where = substation_of(board)
-caps = capacities(file_time(CAPACITY_FILE), file_time(CAPACITY95_FILE))
+caps = capacities(file_time(CAPACITY_FILE), file_time(CAPACITY95_FILE), file_time(RULE_FILE))
+has_rule = "rule" in caps.columns
 
 # Values that live across views. Streamlit forgets a widget's value on any
 # run where the widget isn't drawn, so copy them over every run.
 DEFAULTS = {"view": VIEWS[0], "bus": farthest, "mw": 0.0,
-            "condition": "Typical", "cap_size": MAP_SIZE_MW}
+            "condition": "Typical", "cap_size": MAP_SIZE_MW, "cap_layer": LAYERS[0]}
 for key, value in DEFAULTS.items():
     current = st.session_state.get(key)
     if current is None:  # first run, or a control that was cleared
@@ -306,6 +326,38 @@ def plain_limit(limit):
     if limit.startswith("Line"):
         return limit.split(" is ")[0].lower() + " overloading"
     return "the substation transformer overloading"
+
+
+RULE_NOTE = ("The 3% rule: German grid operators may plan on curtailing up to 3% of a solar "
+             "plant's yearly energy (§11(2) EnWG).")
+
+
+def rule_size_text(row):
+    """'3.1 MW', or '20.0 MW or more' at the top of the search range."""
+    top = row.rule >= MAX_SEARCH_MW - 1e-9
+    return f"{row.rule:.1f} MW" + (" or more" if top else "")
+
+
+def rule_line(bus):
+    """Try a project's line: firm capacity, then the 3% rule's."""
+    row = caps.loc[bus]
+    firm = f"Firm: <b>{row.firm:.1f} MW</b>."
+    if row.firm >= MAX_SEARCH_MW - 1e-9:
+        return f"{firm} That's the top of the search range, so the 3% rule can't add more."
+    if row.rule <= row.firm + 1e-9:
+        return f"{firm} The 3% rule adds nothing here."
+    return (f"{firm} Under the 3% rule: <b>{rule_size_text(row)}</b>, losing "
+            f"<b>{row.rule_share:.1%}</b> of its energy.")
+
+
+def rule_detail(row, daylight_hours):
+    """The Capacity map's line about the 3% rule at one bus."""
+    if row.rule <= row.firm + 1e-9:
+        return "The 3% rule adds nothing here."
+    hours = f" of {daylight_hours:,} daylight hours" if daylight_hours else " hours"
+    return (f"Under the 3% rule <b>{rule_size_text(row)}</b>, curtailing {row.rule_share:.1%} of its "
+            f"energy in {row.rule_hours:,}{hours}: <b>+{row.rule_gain:,.0f} MWh</b> of clean energy "
+            f"a year.")
 
 
 def toggle_solar():
@@ -475,6 +527,11 @@ def try_a_project():
         if day_text:
             html('<div class="hr-note">Every hour is a full AC power flow. Demand follows an '
                  'illustrative sunny-weekend pattern, low at midday and highest in the evening.</div>')
+        if has_rule and bus in caps.index:
+            # One block, so the note sits cleanly under the line.
+            html(f'<div><div class="hr-where" style="margin-top:0">{rule_line(bus)}</div>'
+                 f'<div class="hr-note" style="margin-top:.3rem">{RULE_NOTE} Worked out hour by '
+                 'hour over 2024 with NASA satellite sunlight, holding load at its minimum.</div></div>')
     with lamp_col:
         if solved:
             vmax_bus = int(net.res_bus.vm_pu.idxmax())
@@ -522,12 +579,18 @@ def try_a_project():
         if bus in caps.index:
             row = caps.loc[bus]
             scale = 20.0
-            html(f"""<div class="hr-gauge"><div class="wrap"><div class="track">
-<i style="width:{min(row.flex / scale, 1) * 100:.1f}%;background:{ORANGE}"></i>
+            # Longest bar first, so each shorter one sits on top of it.
+            layers = [(row.flex, ORANGE)] + ([(row.rule, SUN)] if has_rule else [])
+            layers.sort(key=lambda layer: -layer[0])
+            bars = "".join(f'<i style="width:{min(v / scale, 1) * 100:.1f}%;background:{c}"></i>'
+                           for v, c in layers)
+            rule_key = (f'<span><i style="background:{SUN}"></i>3% rule up to {row.rule:.1f} MW</span>'
+                        if has_rule else "")
+            html(f"""<div class="hr-gauge"><div class="wrap"><div class="track">{bars}
 <i style="width:{min(row.firm / scale, 1) * 100:.1f}%;background:{GREEN}"></i>
 </div><div class="mark" style="left:{min(mw / scale, 1) * 100:.1f}%"></div></div>
 <div class="keys"><span><i style="background:{GREEN}"></i>Firm up to {row.firm:.1f} MW</span>
-<span><i style="background:{ORANGE}"></i>Flexible up to {row.flex:.1f} MW</span></div></div>""")
+<span><i style="background:{ORANGE}"></i>Flexible up to {row.flex:.1f} MW</span>{rule_key}</div></div>""")
     with c3:
         st.segmented_control("Grid condition", list(CONDITIONS), key="condition",
                              required=True, width="stretch")
@@ -537,28 +600,60 @@ def try_a_project():
 def capacity_map():
     bus = int(st.session_state.bus)
     size = float(st.session_state.cap_size)
+    rule = has_rule and st.session_state.cap_layer == LAYERS[1]
+    second = caps.rule if rule else caps.flex
+    check = rule_check(file_time(RULE_CHECK_FILE)) if rule else None
 
     clicked = show_board(capacity_board(base_grid(), board, size, caps.firm.to_dict(),
-                                        caps.flex.to_dict(), bus))
+                                        second.to_dict(), bus, kind="rule" if rule else "flex",
+                                        gains=caps.rule_gain.to_dict() if rule else None))
     if clicked is not None and clicked != bus and clicked in mv_buses:
         st.session_state.bus = clicked
         st.rerun()
 
     firm_n = int((caps.firm >= size - 1e-9).sum())
     flex_n = int((caps.flex >= size - 1e-9).sum())
+    second_n = int((second >= size - 1e-9).sum())
     total = len(caps)
     controls, counts = st.columns([1, 2.1], gap="large")
     with controls:
+        if has_rule:
+            st.segmented_control("Layer", LAYERS, key="cap_layer", required=True, width="stretch")
         st.slider("Solar project at every bus", 0.5, 20.0, step=0.5, key="cap_size",
                   format="%.1f MW")
         pick_bus()
         if bus in caps.index:
             row = caps.loc[bus]
-            share = ("" if pd.isna(row.pass_share)
-                     else f", passing {row.pass_share:.0%} of sampled conditions")
-            html(f"""<div class="hr-where">Firm <b>{row.firm:.1f} MW</b>, limited by
+            if rule:
+                hours = check.get("daylight_hours") if check else None
+                html(f"""<div class="hr-where">Firm <b>{row.firm:.1f} MW</b>, limited by
+{plain_limit(row.firm_limit)}. {rule_detail(row, hours)}</div>""")
+            else:
+                share = ("" if pd.isna(row.pass_share)
+                         else f", passing {row.pass_share:.0%} of sampled conditions")
+                html(f"""<div class="hr-where">Firm <b>{row.firm:.1f} MW</b>, limited by
 {plain_limit(row.firm_limit)}. Flexible <b>{row.flex:.1f} MW</b>{share}.</div>""")
     with counts:
+        if rule:
+            html(f"""<div class="hr-counts">
+<div class="hr-count firm"><div class="big">{firm_n}<small>of {total}</small></div>
+<div class="lbl">buses take {size:g} MW firm: it fits even in the worst case</div></div>
+<div class="hr-count rule"><div class="big">{second_n}<small>of {total}</small></div>
+<div class="lbl">take it under the 3% rule, losing at most 3% of its yearly energy</div></div>
+<div class="hr-count"><div class="big">+{second_n - firm_n}</div>
+<div class="lbl">buses opened up by the 3% rule, with no new wires</div></div></div>""")
+            recheck = ""
+            if check:
+                recheck = (f" Rechecked with the real power flow at {check['buses_checked']} buses, "
+                           f"{check['hours_checked']:,} hours: {check['buses_kept']} kept the model's "
+                           f"size, {check['buses_lowered']} came down by at most "
+                           f"{check['most_lowered_mw']:g} MW.")
+            html(f"""<div class="hr-note" style="margin-top:.2rem">{RULE_NOTE} For every daylight
+hour of 2024, from NASA satellite sunlight, the ML model finds how much each bus can take, and
+anything above that is curtailed. Assumptions: load held at its minimum (10% of peak) all year,
+the solar already on the grid follows the same sunlight and is never curtailed, hourly
+data.{recheck}</div>""")
+            return
         html(f"""<div class="hr-counts">
 <div class="hr-count firm"><div class="big">{firm_n}<small>of {total}</small></div>
 <div class="lbl">buses take {size:g} MW firm: it fits even in the worst case</div></div>
@@ -704,7 +799,7 @@ def electrical_space():
 
     left, right = st.columns([1.25, 1], gap="large")
     with left:
-        show_disk(disk_data(net, board, disk(), states, bus))
+        show_disk(disk_data(net, board, disk(), states, bus, fit=(curved, flat)))
     with right:
         html('<div class="hr-h" style="margin-top:0">Electrical space</div>')
         html("""<div class="hr-copy">On a map, distance is measured in kilometres. To a grid, the
@@ -712,17 +807,21 @@ distance that matters is electrical: the impedance of the lines between two poin
 farther out a bus is electrically, the more a new solar project raises its voltage.</div>""")
         html("""<div class="hr-copy">This view draws the grid in the hyperbolic plane, where every
 line's length is its impedance. A radial grid is a tree, and trees fit hyperbolic space far better
-than a flat page: room grows exponentially away from any point, so every branch keeps its own space.
-Click a bus to travel to it. Moving through hyperbolic space keeps every distance true, so its
-neighbourhood opens up while the rest of the grid stays in view at the edge.</div>""")
+than a flat page: room grows exponentially away from any point, so every branch keeps its own
+space.</div>""")
+        html("""<div class="hr-copy">Drag to glide through the grid, or click a bus to travel to it.
+Every distance and angle stays true as you move: the part you move to opens up, and the rest stays
+in view at the edge. The faint seven-sided tiles behind the grid are all the same size in hyperbolic
+space, three to a corner, which can't happen on a flat page.</div>""")
         html(f"""<div class="hr-counts" style="grid-template-columns: repeat(2, minmax(0, 1fr))">
 <div class="hr-count firm"><div class="big">{curved:.0%}</div>
 <div class="lbl">average distance error in this hyperbolic drawing</div></div>
 <div class="hr-count"><div class="big">{flat:.0%}</div>
-<div class="lbl">in the best possible flat drawing</div></div></div>""")
+<div class="lbl">in a flat drawing fitted to the same distances</div></div></div>""")
         html(f"""<div class="hr-note" style="margin-top:.2rem">Measured over all {pairs:,} pairs of
-buses against their true electrical distance. The flat drawing is classical multidimensional
-scaling, the standard best fit.</div>""")
+buses against their true electrical distance. The flat drawing is metric multidimensional scaling
+(SMACOF), which moves points to match the distances as closely as it can. Switch to Flat to see
+it.</div>""")
         state_line = (f"{mw:g} MW of new solar at bus {bus}" if mw > 0 else "no new solar")
         html(f'<div class="hr-where" style="margin-top:.4rem">Colours and moving dots show the same '
              f'power flow as Try a project: {state_line}, {condition.lower()} conditions.</div>')
