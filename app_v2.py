@@ -14,6 +14,9 @@ import pandas as pd
 import streamlit as st
 
 import ml
+import sunlight
+from sunny_day import day_profile, play_day
+from hyperbolic import disk_data, disk_layout, measure_fit, show_disk
 from capacity_data import CAPACITY95_FILE, CAPACITY_FILE, read_capacity, read_capacity95
 from control_room import (GREEN, ORANGE, RED, board_layout, capacity_board, explore_board,
                           flows_outward, path_lines, show_board, substation_of)
@@ -39,7 +42,7 @@ CONDITION_NOTES = {
     "Typical": "Load at 35% of peak, other generators at 40%.",
     "Best case": "Load at 60% of peak, other generators off: the most room for new solar.",
 }
-VIEWS = ["Try a project", "Capacity map", "Proof"]
+VIEWS = ["Try a project", "Capacity map", "Electrical space", "Proof"]
 DEMO_MW = 3.0  # what the one-click button adds
 MAP_SIZE_MW = 5.0  # starting project size on the Capacity map
 RACE_CONDITIONS = 100  # grid conditions per bus in the speed test
@@ -76,9 +79,28 @@ def with_solar(bus, mw, condition):
     return net, result
 
 
+@st.cache_resource(max_entries=30)
+def day_replay(bus, mw, sunlight_file_time):
+    """The "Play a sunny day" replay: labels, and one solved grid per hour."""
+    short, long_label, sun = day_profile()
+    return short, long_label, play_day(bus, mw, sun)
+
+
 @st.cache_resource
 def layout():
     return board_layout(base_grid())
+
+
+@st.cache_resource
+def disk():
+    """The grid laid out in the hyperbolic plane (hyperbolic.py)."""
+    return disk_layout(base_grid(), layout())
+
+
+@st.cache_data
+def hyperbolic_fit():
+    """(error of the hyperbolic drawing, error of the best flat drawing)."""
+    return measure_fit(base_grid(), layout())
 
 
 @st.cache_resource
@@ -109,6 +131,15 @@ def file_time(path):
     return path.stat().st_mtime if path.exists() else 0
 
 
+# Kept on disk, so a bus and size checked once comes back instantly, even
+# after the app restarts. The sunlight file's time is part of the key.
+@st.cache_data(persist="disk", show_spinner=False)
+def sunlight_year(bus, mw, sunlight_file_time):
+    """A year of real 2024 sunlight at `bus` with `mw` of solar (sunlight.py)."""
+    models, features = model_and_features()
+    return sunlight.year_check(bus, mw, models, features)
+
+
 # ---------------------------------------------------------------- look
 
 CSS = """
@@ -123,9 +154,12 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 [data-testid="stMainBlockContainer"] { padding: 1rem 1.5rem 1.4rem; max-width: 1720px; }
 [data-testid="stVerticalBlock"] { gap: .8rem; }
 [data-testid="stWidgetLabel"] p { font-size: .9rem; color: var(--ink3); }
-.st-key-toggle button, .st-key-race button { border: 1.5px solid #A0A0A0; border-radius: 12px;
+.st-key-toggle button, .st-key-race button, .st-key-play_day button, .st-key-toggle_space button { border: 1.5px solid #A0A0A0; border-radius: 12px;
     background: transparent; padding: .55rem 1.4rem; min-height: 0; }
-.st-key-toggle button p { font-size: 1.35rem; color: #FFFFFF; }
+.st-key-toggle button p, .st-key-play_day button p { font-size: 1.35rem; color: #FFFFFF; }
+.st-key-toggle_space button p { font-size: 1.1rem; color: #FFFFFF; }
+.st-key-play_day button { border-color: #E8BE3A; }
+.st-key-play_day button:hover { border-color: #FFD34D; background: #1A1A1A; }
 .st-key-race button p { font-size: 1.1rem; color: #FFFFFF; }
 .st-key-toggle button:hover, .st-key-race button:hover { border-color: #FFFFFF; background: #1A1A1A; }
 .hr-head { display: flex; align-items: center; gap: 14px; }
@@ -279,6 +313,75 @@ def toggle_solar():
     st.session_state.mw = 0.0 if st.session_state.mw > 0 else DEMO_MW
 
 
+def start_day():
+    """The "Play a sunny day" button: play the replay on the next run."""
+    st.session_state.play_id = st.session_state.get("play_id", 0) + 1
+    st.session_state.play_now = True
+
+
+def broken_limit(result):
+    """The limit a failing check broke, in a few words."""
+    if result["max_voltage"] is None:
+        return "No stable operating point"
+    if result["max_voltage"] > MAX_VOLTAGE_PU:
+        return f"Voltage over {MAX_VOLTAGE_PU} pu"
+    if result["max_line"] > MAX_LOADING_PERCENT:
+        return "A line is overloaded"
+    return "A transformer is overloaded"
+
+
+def day_frames(hours, bus, mw):
+    """Board frames for the replay: only what changes from hour to hour."""
+    frames = []
+    for h, sun, net, result in hours:
+        if result["max_voltage"] is None:
+            continue  # no solved grid to draw for this hour
+        data = explore_board(net, board, bus, mw * sun)
+        frames.append({
+            "clock": f"{h:02d}:00", "sun": sun, "alarm": not result["passes"],
+            "status": "Within every limit" if result["passes"] else broken_limit(result),
+            "buses": [{k: b[k] for k in ("bar", "colour", "state")} for b in data["buses"]],
+            "lines": [{k: x[k] for k in ("dir", "mw", "stroke")} for x in data["lines"]],
+            "subs": [{k: x[k] for k in ("note", "over")} for x in data["subs"]],
+        })
+    return frames
+
+
+def hour_span(hours):
+    """[12, 13, 14] -> 'from 12:00 to 14:00'."""
+    if len(hours) == 1:
+        return f"at {hours[0]:02d}:00"
+    if hours == list(range(hours[0], hours[-1] + 1)):
+        return f"from {hours[0]:02d}:00 to {hours[-1]:02d}:00"
+    return "at " + ", ".join(f"{h:02d}:00" for h in hours)
+
+
+def day_story(short, hours, bus, mw):
+    """One plain sentence about the replayed day."""
+    failing = [h for h, s, net, r in hours if not r["passes"]]
+    if mw > 0 and failing:
+        results = [r for h, s, net, r in hours if not r["passes"]]
+        if any(r["max_voltage"] is not None and r["max_voltage"] > MAX_VOLTAGE_PU for r in results):
+            what = f"pushes the voltage over the {MAX_VOLTAGE_PU} limit"
+        else:
+            what = "overloads part of the grid"
+        n = len(failing)
+        return (f"On {short}, {mw:g} MW at bus {bus} {what} {hour_span(failing)}. "
+                f"A flexible connection would hold it back for just those {n} hour"
+                f"{'s' if n != 1 else ''} and let it run freely the rest of the day.")
+    if mw > 0:
+        return (f"On {short}, {mw:g} MW at bus {bus} stays inside every limit all day, "
+                "even at the midday peak.")
+    if failing:
+        return f"On {short}, the grid breaks a limit {hour_span(failing)} even without new solar."
+    back = [h for h, s, net, r in hours
+            if r["max_voltage"] is not None and (net.res_trafo.p_hv_mw < 0).any()]
+    if back:
+        return (f"On {short}, the solar already on this grid sends power back up through "
+                f"the substations {hour_span(back)}, and every limit holds.")
+    return f"On {short}, every limit holds all day."
+
+
 def story(condition, bus, mw, before_net, after_net, result):
     """One plain sentence about what the power flow shows."""
     phrase = CONDITION_PHRASES[condition]
@@ -344,17 +447,34 @@ def try_a_project():
     solved = result["max_voltage"] is not None
     shown = net if solved else before_net
 
-    clicked = show_board(explore_board(shown, board, bus, mw if solved else 0,
-                                       result["ms"] if solved else None))
+    data = explore_board(shown, board, bus, mw if solved else 0,
+                         result["ms"] if solved else None)
+    day_text = None
+    if st.session_state.pop("play_now", False):
+        with st.spinner("Solving the grid for every hour of the day..."):
+            short, long_label, hours = day_replay(bus, mw, file_time(sunlight.SUNLIGHT_FILE))
+            data["frames"] = day_frames(hours, bus, mw)
+        data["play"] = st.session_state.play_id
+        data["day_label"] = long_label
+        day_text = day_story(short, hours, bus, mw)
+    clicked = show_board(data)
     if clicked is not None and clicked != bus and clicked in mv_buses:
         st.session_state.bus = clicked
         st.rerun()
 
     story_col, lamp_col = st.columns([1.45, 1], gap="large")
     with story_col:
-        html(f'<div class="hr-story">{story(condition, bus, mw, before_net, net, result)}</div>')
+        if day_text:
+            html(f'<div class="hr-story">{day_text}</div>')
+        else:
+            html(f'<div class="hr-story">{story(condition, bus, mw, before_net, net, result)}</div>')
         label = f"Add {DEMO_MW:g} MW of solar at bus {bus}" if mw == 0 else "Remove the solar"
-        st.button(label, key="toggle", on_click=toggle_solar)
+        with st.container(horizontal=True, gap="small"):
+            st.button(label, key="toggle", on_click=toggle_solar)
+            st.button("Play a sunny day", key="play_day", on_click=start_day)
+        if day_text:
+            html('<div class="hr-note">Every hour is a full AC power flow. Demand follows an '
+                 'illustrative sunny-weekend pattern, low at midday and highest in the evening.</div>')
     with lamp_col:
         if solved:
             vmax_bus = int(net.res_bus.vm_pu.idxmax())
@@ -375,6 +495,23 @@ def try_a_project():
                 f'<div class="v">{text}<span>{limit}</span></div>'
                 for name, sub, v, text, limit, w, lim in rows)
             html(f'<div class="hr-lamps">{cells}</div>')
+
+        # A year of real satellite sunlight for this bus and size.
+        if st.button("Check a year of real sunlight", key="sun_check"):
+            st.session_state.sun_request = (bus, mw)
+        if st.session_state.get("sun_request") == (bus, mw):
+            if not sunlight.SUNLIGHT_FILE.exists():
+                html('<div class="hr-note">No sunlight data yet: run '
+                     '<code>py -3.14 fetch_sunlight.py</code> once, with internet.</div>')
+            elif mw == 0:
+                html('<div class="hr-note">Add some solar first.</div>')
+            else:
+                with st.spinner("Checking every daylight hour of 2024..."):
+                    r = sunlight_year(bus, mw, file_time(sunlight.SUNLIGHT_FILE))
+                html(f'<div class="hr-where">With real 2024 sunlight (NASA satellite data), '
+                     f'<b>{mw:g} MW</b> at bus {bus} would need curtailing in '
+                     f'<b>{r["solver_fail_hours"]:,}</b> of {r["daylight_hours"]:,} daylight '
+                     f'hours, if demand stayed as low as the worst case.</div>')
 
     c1, c2, c3 = st.columns([1, 1.2, 1.2], gap="large")
     with c1:
@@ -553,9 +690,51 @@ capacity.</div>""")
                  f'never saw" src="data:image/png;base64,{data}"></div>')
 
 
+def electrical_space():
+    bus = int(st.session_state.bus)
+    mw = round(float(st.session_state.mw), 1)
+    condition = st.session_state.condition
+    net, result = with_solar(bus, mw, condition)
+    if result["max_voltage"] is None:  # nothing solved to draw: show the grid without it
+        net, mw = with_solar(bus, 0.0, condition)[0], 0.0
+    states = explore_board(net, board, bus, mw)["buses"]
+    curved, flat = hyperbolic_fit()
+    pairs = len(disk()["nodes"]) - 1
+    pairs = pairs * (pairs - 1) // 2
+
+    left, right = st.columns([1.25, 1], gap="large")
+    with left:
+        show_disk(disk_data(net, board, disk(), states, bus))
+    with right:
+        html('<div class="hr-h" style="margin-top:0">Electrical space</div>')
+        html("""<div class="hr-copy">On a map, distance is measured in kilometres. To a grid, the
+distance that matters is electrical: the impedance of the lines between two points, in ohms. The
+farther out a bus is electrically, the more a new solar project raises its voltage.</div>""")
+        html("""<div class="hr-copy">This view draws the grid in the hyperbolic plane, where every
+line's length is its impedance. A radial grid is a tree, and trees fit hyperbolic space far better
+than a flat page: room grows exponentially away from any point, so every branch keeps its own space.
+Click a bus to travel to it. Moving through hyperbolic space keeps every distance true, so its
+neighbourhood opens up while the rest of the grid stays in view at the edge.</div>""")
+        html(f"""<div class="hr-counts" style="grid-template-columns: repeat(2, minmax(0, 1fr))">
+<div class="hr-count firm"><div class="big">{curved:.0%}</div>
+<div class="lbl">average distance error in this hyperbolic drawing</div></div>
+<div class="hr-count"><div class="big">{flat:.0%}</div>
+<div class="lbl">in the best possible flat drawing</div></div></div>""")
+        html(f"""<div class="hr-note" style="margin-top:.2rem">Measured over all {pairs:,} pairs of
+buses against their true electrical distance. The flat drawing is classical multidimensional
+scaling, the standard best fit.</div>""")
+        state_line = (f"{mw:g} MW of new solar at bus {bus}" if mw > 0 else "no new solar")
+        html(f'<div class="hr-where" style="margin-top:.4rem">Colours and moving dots show the same '
+             f'power flow as Try a project: {state_line}, {condition.lower()} conditions.</div>')
+        label = f"Add {DEMO_MW:g} MW of solar at bus {bus}" if mw == 0 else "Remove the solar"
+        st.button(label, key="toggle_space", on_click=toggle_solar)
+
+
 view = st.session_state.view
 if view == "Capacity map":
     capacity_map()
+elif view == "Electrical space":
+    electrical_space()
 elif view == "Proof":
     proof()
 else:

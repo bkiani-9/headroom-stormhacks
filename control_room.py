@@ -351,6 +351,18 @@ CSS = """
        padding: 7px 11px; font-size: 13.5px; line-height: 1.35; color: var(--ink);
        box-shadow: 0 10px 24px -10px rgba(0,0,0,.9); max-width: 320px; transition: opacity .12s ease; }
 .tip b { display: block; font-weight: 600; font-size: 14.5px; }
+.clock { position: absolute; bottom: 34px; right: 8px; z-index: 2; opacity: 0; pointer-events: none;
+         background: rgba(10,10,10,.93); border: 1px solid #5E5E5E; border-radius: 14px;
+         padding: 9px 14px 10px; width: 196px; box-sizing: border-box; transition: opacity .3s ease; }
+.hb.playing .clock { opacity: 1; }
+.clock .time { font-size: 36px; font-weight: 600; line-height: 1; color: #FFFFFF; }
+.clock .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12.5px; color: var(--ink3); }
+.clock .sun { flex: 1; height: 6px; border-radius: 3px; background: #2C2C2C; overflow: hidden; }
+.clock .sun i { display: block; height: 100%; width: 0; background: #FFD34D; border-radius: 3px;
+                box-shadow: 0 0 8px rgba(255,211,77,.8); transition: width .5s ease; }
+.clock .status { margin-top: 8px; font-size: 14px; font-weight: 600; color: #7EDB4C; }
+.clock.alarm .time, .clock.alarm .status { color: #FF4D57; }
+.clock .what { margin-top: 4px; font-size: 12px; line-height: 1.3; color: var(--ink3); }
 .tip span { color: var(--ink2); }
 @media (prefers-reduced-motion: reduce) {
   .legend .dot-sw { animation: none; }
@@ -388,8 +400,17 @@ function build(host, data) {
   const tip = document.createElement("div");
   tip.className = "tip";
   wrap.appendChild(tip);
+  const clock = document.createElement("div");
+  clock.className = "clock";
+  clock.innerHTML = '<div class="time"></div><div class="row"><span>Sun</span>' +
+    '<div class="sun"><i></i></div></div><div class="status"></div><div class="what"></div>';
+  wrap.appendChild(clock);
 
-  const state = { layoutId: L.id, wrap, svg, tip, legend, buses: {}, edges: [], subs: [], W, H };
+  const state = { layoutId: L.id, wrap, svg, tip, legend, buses: {}, edges: [], subs: [], W, H,
+                  clock, clockTime: clock.querySelector(".time"),
+                  clockSun: clock.querySelector(".sun i"),
+                  clockStatus: clock.querySelector(".status"),
+                  clockWhat: clock.querySelector(".what") };
   const showTip = (evt, info) => {
     if (!info) return;
     const box = wrap.getBoundingClientRect();
@@ -490,13 +511,9 @@ function mark(state, id, text) {
   state.labelText.setAttribute("y", y + 14);
 }
 
-function update(state, data) {
-  const capacity = data.mode === "capacity";
-  state.wrap.classList.toggle("mode-capacity", capacity);
-  state.busInfo = data.buses;
-  state.lineInfo = data.lines;
-  state.subInfo = data.subs;
-  data.lines.forEach((f, i) => {
+// Colours, bars and flows: everything that changes from one grid state to the next.
+function paint(state, layout, buses, lines, subs, capacity) {
+  lines.forEach((f, i) => {
     const e = state.edges[i];
     e.ln.style.stroke = f.stroke;
     const moving = f.mw >= 0.02;
@@ -504,12 +521,12 @@ function update(state, data) {
     e.target = moving ? f.dir * (10 + 26 * Math.sqrt(f.mw)) : 0;
     e.dots.style.opacity = moving ? (capacity ? 0.35 : 0.95) : 0;
   });
-  data.subs.forEach((f, i) => {
+  subs.forEach((f, i) => {
     state.subs[i].note.textContent = f.note;
     state.subs[i].g.classList.toggle("over", !!f.over);
   });
-  data.layout.buses.forEach((b, i) => {
-    const info = data.buses[i], node = state.buses[b.id];
+  layout.buses.forEach((b, i) => {
+    const info = buses[i], node = state.buses[b.id];
     for (const k of ["warn", "over", "firm", "flex", "cant", "idle"]) {
       node.g.classList.toggle(k, info.state === k);
     }
@@ -519,6 +536,15 @@ function update(state, data) {
     const two = info.bar2 !== undefined;
     node.bar2.setAttribute("width", two ? Math.max(3.5, state.BW * info.bar2) : 0);
   });
+}
+
+function update(state, data) {
+  const capacity = data.mode === "capacity";
+  state.wrap.classList.toggle("mode-capacity", capacity);
+  state.busInfo = data.buses;
+  state.lineInfo = data.lines;
+  state.subInfo = data.subs;
+  paint(state, data.layout, data.buses, data.lines, data.subs, capacity);
   mark(state, data.selected, data.label);
 
   state.legend.replaceChildren();
@@ -558,6 +584,42 @@ function tick(state, now) {
   requestAnimationFrame((t) => tick(state, t));
 }
 
+const FRAME_MS = REDUCED ? 1000 : 650;
+
+function stopPlay(state) {
+  if (state.playTimer) clearTimeout(state.playTimer);
+  state.playTimer = null;
+  state.wrap.classList.remove("playing");
+}
+
+// Play one solved grid per hour, with a clock, then return to the live view.
+function playDay(state, data) {
+  stopPlay(state);
+  const frames = data.frames;
+  state.wrap.classList.add("playing");
+  state.clockWhat.textContent = data.day_label || "";
+  let i = 0;
+  const step = () => {
+    if (!state.wrap.isConnected) return;
+    if (i >= frames.length) {
+      state.playTimer = setTimeout(() => {
+        stopPlay(state);
+        paint(state, data.layout, data.buses, data.lines, data.subs, false);
+      }, 1800);
+      return;
+    }
+    const f = frames[i];
+    paint(state, data.layout, f.buses, f.lines, f.subs, false);
+    state.clockTime.textContent = f.clock;
+    state.clockSun.style.width = `${Math.round(f.sun * 100)}%`;
+    state.clockStatus.textContent = f.status;
+    state.clock.classList.toggle("alarm", !!f.alarm);
+    i += 1;
+    state.playTimer = setTimeout(step, FRAME_MS);
+  };
+  step();
+}
+
 export default function (component) {
   const { data, parentElement, setTriggerValue } = component;
   if (!data || !data.layout) return;
@@ -568,6 +630,12 @@ export default function (component) {
   }
   state.setTrigger = setTriggerValue;
   update(state, data);
+  if (data.frames && data.play && data.play !== state.lastPlay) {
+    state.lastPlay = data.play;
+    playDay(state, data);
+  } else if (!data.frames) {
+    stopPlay(state);
+  }
   if (!state.running) {
     state.running = true;
     state.last = performance.now();
