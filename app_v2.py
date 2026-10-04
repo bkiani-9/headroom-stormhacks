@@ -39,13 +39,45 @@ CONDITION_PHRASES = {
     "Best case": "In the best case",
 }
 CONDITION_NOTES = {
-    "Worst case": "Load at 10% of peak, other generators at 80%: the least room for new "
-                  "solar. This is the grid as pandapower ships it.",
-    "Typical": "Load at 35% of peak, other generators at 40%.",
-    "Best case": "Load at 60% of peak, other generators off: the most room for new solar.",
+    "Worst case": "A bright, quiet day: demand at 10% of its peak and the solar already on "
+                  "the grid at 80%. The least room for new solar.",
+    "Typical": "An ordinary day: demand at 35% of its peak, the other solar at 40%.",
+    "Best case": "A dark, busy day: demand at 60% of its peak and no other solar. The most "
+                 "room for new solar.",
 }
 VIEWS = ["Try a project", "Capacity map", "Electrical space", "Proof"]
 LAYERS = ["Firm and flexible", "Firm and the 3% rule"]  # the Capacity map's two layers
+INTROS = {
+    "Try a project": "Each box is a connection point on the grid, called a bus. Pick one, choose "
+                     "the size of a new solar project, and see whether the grid can take it.",
+    "Capacity map": "The same question for every connection point at once: can it take a project "
+                    "of this size? Green means always, orange or yellow means with limits on its "
+                    "output, red means no.",
+    "Electrical space": "The same grid, drawn so that distance means electrical resistance, not "
+                        "kilometres. The farther out a point sits, the less new solar it can take.",
+    "Proof": "Can you trust the AI? Here it is tested against the physics engine on cases it "
+             "never saw, and raced against it.",
+}
+HOW_IT_WORKS = """
+1. **A real kind of grid.** A 20 kV distribution grid in Germany (pandapower's MV Oberrhein
+   model): 177 connection points, 2 substations and 153 solar plants already connected.
+2. **A physics engine.** For any new project, an AC power flow, the standard calculation grid
+   operators use, works out every voltage and how full every line is. It's the reference
+   answer, but each check takes a moment.
+3. **An AI model for speed.** Trained on 60,000 physics checks, it answers almost instantly,
+   so it can search the whole grid under thousands of conditions.
+4. **Physics has the last word.** Every capacity on the maps was rechecked with the physics
+   engine.
+
+**Three ways to connect a project**
+- **Firm:** it fits even at the worst moment of the year.
+- **Flexible:** it fits in 95% of grid conditions, and is held back in the rest.
+- **3% rule:** German grid operators may plan on curtailing up to 3% of a plant's yearly
+  energy (§11(2) EnWG). Headroom works this out hour by hour with 2024 NASA satellite sunlight.
+
+**Who it's for:** grid operators deciding where new solar can connect, and developers and
+community energy groups planning projects.
+"""
 DEMO_MW = 3.0  # what the one-click button adds
 MAP_SIZE_MW = 5.0  # starting project size on the Capacity map
 RACE_CONDITIONS = 100  # grid conditions per bus in the speed test
@@ -235,6 +267,9 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-copy { color: var(--ink2); font-size: .98rem; line-height: 1.55; max-width: 62ch; }
 .hr-h { font-size: 1.2rem; font-weight: 600; color: var(--ink); margin-top: .6rem; }
 .hr-warn { border: 1px solid rgba(242,163,36,.5); border-radius: 12px; padding: 10px 14px; color: #F5C978; font-size: .92rem; }
+.hr-intro { color: var(--ink2); font-size: 1rem; line-height: 1.45; max-width: 80ch; padding-top: .35rem; }
+.hr-verdict { color: var(--ink); font-size: 1.12rem; font-weight: 600; line-height: 1.35; max-width: 40em; }
+[data-testid="stPopoverBody"] { max-width: 560px; }
 </style>
 """
 
@@ -300,7 +335,7 @@ def bus_name(bus):
 
 
 def pick_bus():
-    st.selectbox("Bus", mv_buses, key="bus", format_func=bus_name)
+    st.selectbox("Connection point (bus)", mv_buses, key="bus", format_func=bus_name)
 
 
 def where_line(bus):
@@ -350,6 +385,33 @@ def rule_line(bus):
             f"<b>{row.rule_share:.1%}</b> of its energy.")
 
 
+def connection_verdict(bus, mw):
+    """Which kinds of connection fit `mw` at `bus`, in one sentence."""
+    if mw <= 0:
+        return "Choose a project size to see which kinds of connection fit here."
+    row = caps.loc[bus]
+    size = f"{mw:g} MW"
+    if mw <= row.firm + 1e-9:
+        return f"{size} fits here as a firm connection, with no limits on its output."
+    flex = mw <= row.flex + 1e-9
+    rule = has_rule and mw <= row.rule + 1e-9
+    if flex and rule:
+        return (f"{size} fits here with a flexible connection or under Germany's 3% rule, "
+                "but not as a firm connection.")
+    if flex:
+        return f"{size} fits here only with a flexible connection."
+    if rule:
+        return f"{size} fits here only under Germany's 3% rule."
+    return (f"{size} is too big for this point under every option. Try a smaller project, or a "
+            "point closer to a substation.")
+
+
+def voltage_words(vm):
+    """1.0487 -> '4.9% above normal'."""
+    rise = (vm - 1.0) * 100
+    return f"{abs(rise):.1f}% {'above' if rise >= 0 else 'below'} normal"
+
+
 def rule_detail(row, daylight_hours):
     """The Capacity map's line about the 3% rule at one bus."""
     if row.rule <= row.firm + 1e-9:
@@ -374,9 +436,9 @@ def start_day():
 def broken_limit(result):
     """The limit a failing check broke, in a few words."""
     if result["max_voltage"] is None:
-        return "No stable operating point"
+        return "No stable state"
     if result["max_voltage"] > MAX_VOLTAGE_PU:
-        return f"Voltage over {MAX_VOLTAGE_PU} pu"
+        return "Voltage past its limit"
     if result["max_line"] > MAX_LOADING_PERCENT:
         return "A line is overloaded"
     return "A transformer is overloaded"
@@ -414,7 +476,7 @@ def day_story(short, hours, bus, mw):
     if mw > 0 and failing:
         results = [r for h, s, net, r in hours if not r["passes"]]
         if any(r["max_voltage"] is not None and r["max_voltage"] > MAX_VOLTAGE_PU for r in results):
-            what = f"pushes the voltage over the {MAX_VOLTAGE_PU} limit"
+            what = "pushes the voltage past its safe limit"
         else:
             what = "overloads part of the grid"
         n = len(failing)
@@ -450,7 +512,7 @@ def story(condition, bus, mw, before_net, after_net, result):
         return (f"{phrase}, power flows out from the substation and meets power coming "
                 f"back from the generators near bus {bus}.")
     if result["max_voltage"] is None:
-        return (f"{mw:g} MW at bus {bus}: the power flow finds no stable operating point. "
+        return (f"{mw:g} MW at bus {bus}: the physics finds no stable state. "
                 "The grid can't carry it.")
     after = flows_outward(after_net, path)
     turned = sum(b and not a for b, a in zip(before, after))
@@ -466,7 +528,7 @@ def story(condition, bus, mw, before_net, after_net, result):
         return f"{mw:g} MW at bus {bus}: {flow}, and every limit holds."
     broken = []
     if result["max_voltage"] > MAX_VOLTAGE_PU:
-        broken.append(f"voltage goes over the {MAX_VOLTAGE_PU} limit")
+        broken.append("voltage rises past its safe limit")
     if result["max_line"] > MAX_LOADING_PERCENT:
         broken.append(f"line {result['worst_line']} overloads")
     if result["max_trafo"] > MAX_LOADING_PERCENT:
@@ -479,7 +541,7 @@ left, right = st.columns([1.5, 1], vertical_alignment="center")
 with left:
     html(f"""<div class="hr-head">{LOGO}<div>
 <div class="hr-name">Headroom</div>
-<div class="hr-line">How much new solar each bus of a 20 kV grid can take, checked against real power flow</div>
+<div class="hr-line">Where new solar can connect to the grid, worked out in seconds and checked against real physics</div>
 </div></div>""")
 with right:
     st.segmented_control("View", VIEWS, key="view", label_visibility="collapsed",
@@ -525,25 +587,28 @@ def try_a_project():
             st.button(label, key="toggle", on_click=toggle_solar)
             st.button("Play a sunny day", key="play_day", on_click=start_day)
         if day_text:
-            html('<div class="hr-note">Every hour is a full AC power flow. Demand follows an '
+            html('<div class="hr-note">Every hour is a full physics check. Demand follows an '
                  'illustrative sunny-weekend pattern, low at midday and highest in the evening.</div>')
-        if has_rule and bus in caps.index:
-            # One block, so the note sits cleanly under the line.
-            html(f'<div><div class="hr-where" style="margin-top:0">{rule_line(bus)}</div>'
-                 f'<div class="hr-note" style="margin-top:.3rem">{RULE_NOTE} Worked out hour by '
-                 'hour over 2024 with NASA satellite sunlight, holding load at its minimum.</div></div>')
+        if bus in caps.index:
+            # One block, so the lines sit cleanly under each other.
+            numbers = (f'<div class="hr-where" style="margin-top:.3rem">{rule_line(bus)}</div>'
+                       f'<div class="hr-note" style="margin-top:.3rem">{RULE_NOTE} Worked out hour '
+                       'by hour over 2024 with NASA satellite sunlight, holding demand at its '
+                       'minimum.</div>') if has_rule else ""
+            html(f'<div><div class="hr-verdict">{connection_verdict(bus, mw)}</div>{numbers}</div>')
     with lamp_col:
         if solved:
             vmax_bus = int(net.res_bus.vm_pu.idxmax())
             rows = [
-                ("Highest voltage", f"bus {vmax_bus}", result["max_voltage"],
-                 f"{result['max_voltage']:.4f} pu", f"limit {MAX_VOLTAGE_PU}",
+                ("Voltage", f"highest, at bus {vmax_bus}", result["max_voltage"],
+                 voltage_words(result["max_voltage"]),
+                 f"limit {(MAX_VOLTAGE_PU - 1) * 100:.0f}% above",
                  MAX_VOLTAGE_PU - 0.01, MAX_VOLTAGE_PU),
-                ("Busiest line", f"line {result['worst_line']}", result["max_line"],
-                 f"{result['max_line']:.0f}%", f"limit {MAX_LOADING_PERCENT:.0f}%",
+                ("Busiest power line", f"line {result['worst_line']}", result["max_line"],
+                 f"{result['max_line']:.0f}% full", f"limit {MAX_LOADING_PERCENT:.0f}%",
                  70.0, MAX_LOADING_PERCENT),
-                ("Busiest transformer", "110/20 kV", result["max_trafo"],
-                 f"{result['max_trafo']:.0f}%", f"limit {MAX_LOADING_PERCENT:.0f}%",
+                ("Substation transformer", "the busier one", result["max_trafo"],
+                 f"{result['max_trafo']:.0f}% full", f"limit {MAX_LOADING_PERCENT:.0f}%",
                  70.0, MAX_LOADING_PERCENT),
             ]
             cells = "".join(
@@ -575,7 +640,8 @@ def try_a_project():
         pick_bus()
         html(f'<div class="hr-where">{where_line(bus)}</div>')
     with c2:
-        st.slider("New solar at this bus", 0.0, 20.0, step=0.1, key="mw", format="%.1f MW")
+        st.slider("Size of the new solar project", 0.0, 20.0, step=0.1, key="mw",
+                  format="%.1f MW")
         if bus in caps.index:
             row = caps.loc[bus]
             scale = 20.0
@@ -619,8 +685,8 @@ def capacity_map():
     with controls:
         if has_rule:
             st.segmented_control("Layer", LAYERS, key="cap_layer", required=True, width="stretch")
-        st.slider("Solar project at every bus", 0.5, 20.0, step=0.5, key="cap_size",
-                  format="%.1f MW")
+        st.slider("Project size at every connection point", 0.5, 20.0, step=0.5,
+                  key="cap_size", format="%.1f MW")
         pick_bus()
         if bus in caps.index:
             row = caps.loc[bus]
@@ -637,33 +703,33 @@ def capacity_map():
         if rule:
             html(f"""<div class="hr-counts">
 <div class="hr-count firm"><div class="big">{firm_n}<small>of {total}</small></div>
-<div class="lbl">buses take {size:g} MW firm: it fits even in the worst case</div></div>
+<div class="lbl">connection points take {size:g} MW firm: it fits even at the worst moment</div></div>
 <div class="hr-count rule"><div class="big">{second_n}<small>of {total}</small></div>
 <div class="lbl">take it under the 3% rule, losing at most 3% of its yearly energy</div></div>
 <div class="hr-count"><div class="big">+{second_n - firm_n}</div>
-<div class="lbl">buses opened up by the 3% rule, with no new wires</div></div></div>""")
+<div class="lbl">more points open up under the 3% rule, with no new wires</div></div></div>""")
             recheck = ""
             if check:
-                recheck = (f" Rechecked with the real power flow at {check['buses_checked']} buses, "
-                           f"{check['hours_checked']:,} hours: {check['buses_kept']} kept the model's "
+                recheck = (f" Rechecked with the physics engine at {check['buses_checked']} points, "
+                           f"{check['hours_checked']:,} hours: {check['buses_kept']} kept the AI's "
                            f"size, {check['buses_lowered']} came down by at most "
                            f"{check['most_lowered_mw']:g} MW.")
             html(f"""<div class="hr-note" style="margin-top:.2rem">{RULE_NOTE} For every daylight
-hour of 2024, from NASA satellite sunlight, the ML model finds how much each bus can take, and
-anything above that is curtailed. Assumptions: load held at its minimum (10% of peak) all year,
+hour of 2024, from NASA satellite sunlight, the AI model finds how much each point can take, and
+anything above that is curtailed. Assumptions: demand held at its minimum (10% of peak) all year,
 the solar already on the grid follows the same sunlight and is never curtailed, hourly
 data.{recheck}</div>""")
             return
         html(f"""<div class="hr-counts">
 <div class="hr-count firm"><div class="big">{firm_n}<small>of {total}</small></div>
-<div class="lbl">buses take {size:g} MW firm: it fits even in the worst case</div></div>
+<div class="lbl">connection points take {size:g} MW firm: it fits even at the worst moment</div></div>
 <div class="hr-count flex"><div class="big">{flex_n}<small>of {total}</small></div>
 <div class="lbl">take it with a flexible connection: it fits in 95% of conditions</div></div>
 <div class="hr-count"><div class="big">+{flex_n - firm_n}</div>
-<div class="lbl">buses opened up by flexibility, with no new wires</div></div></div>""")
-        html("""<div class="hr-note" style="margin-top:.2rem">Firm: the solver's capacity
-search on the worst-case grid. Flexible: the ML model's capacity over 1,000 sampled grid
-conditions, then rechecked with the solver on 50 new ones.</div>""")
+<div class="lbl">more points open up with flexible connections, with no new wires</div></div></div>""")
+        html("""<div class="hr-note" style="margin-top:.2rem">Firm: the physics engine's capacity
+search at the worst moment of the year. Flexible: the AI model's capacity over 1,000 sampled grid
+conditions, then rechecked with the physics engine on 50 new ones.</div>""")
 
 
 def race_markup(done, total, model_s, solver_total_s, finished):
@@ -676,18 +742,18 @@ def race_markup(done, total, model_s, solver_total_s, finished):
     share = done / total if total else 0
     solver_share = min(model_s / solver_total_s, 1) if solver_total_s else 0
     to_go = f"about {clock(solver_total_s - model_s)} to go" if solver_total_s else "waiting"
-    lanes = f"""<div class="hr-lane model"><div class="top"><b>ML model</b>
+    lanes = f"""<div class="hr-lane model"><div class="top"><b>AI model</b>
 <span>{done:,} of {total:,} capacities, {model_s:.1f} s</span></div>
 <div class="bar"><i style="width:{share * 100:.2f}%"></i></div></div>
-<div class="hr-lane solver"><div class="top"><b>Power flow alone, same work</b>
+<div class="hr-lane solver"><div class="top"><b>Physics engine alone, same work</b>
 <span>{solver_share:.2%} done, {to_go}</span></div>
 <div class="bar"><i style="width:{solver_share * 100:.3f}%"></i></div></div>"""
     summary = ""
     if finished:
         summary = (f'<div class="sum"><b>{total:,} capacity searches in {model_s:.1f} s.</b> '
-                   f'The power flow alone would need about <b>{clock(solver_total_s)}</b> '
+                   f'The physics engine alone would need about <b>{clock(solver_total_s)}</b> '
                    f'for the same job, {solver_total_s / model_s:,.0f} times longer. '
-                   f'Every capacity on the map was still rechecked with the real power flow '
+                   f'Every capacity on the maps was still rechecked with the physics engine '
                    f'before it went there.</div>')
     return clean(f'<div class="hr-race">{lanes}{summary}</div>')
 
@@ -738,28 +804,29 @@ def proof():
     recheck = json.loads(recheck_file.read_text()) if recheck_file.exists() else None
 
     tiles = [
-        (f"{pf['accuracy']:.1%}", f"pass or fail agrees with the real power flow, on "
-                                  f"{m['test_scenarios']:,} scenarios the model never saw"),
-        (f"{pf['false_pass_rate']:.1%}", "said pass when the power flow said fail: the "
+        (f"{pf['accuracy']:.1%}", f"agrees with the physics engine on whether a project fits, "
+                                  f"across {m['test_scenarios']:,} cases the AI never saw"),
+        (f"{pf['false_pass_rate']:.1%}", "said a project fits when the physics said no: the "
                                          "dangerous mistake"),
-        (f"{m['capacity']['mean_abs_error_mw']:.2f} MW", "average capacity error against "
-                                                         "the solver's own search"),
+        (f"{m['capacity']['mean_abs_error_mw']:.2f} MW", "average error in the capacity it finds, "
+                                                         "against the physics engine's own search"),
     ]
     if recheck:
         tiles.append((f"{recheck['buses_lowered']} of {recheck['buses']}",
-                      f"buses lowered by the solver recheck, by {recheck['most_lowered_mw']:.1f} MW "
-                      f"at most"))
+                      f"flexible capacities lowered by the physics recheck, by "
+                      f"{recheck['most_lowered_mw']:.1f} MW at most"))
     html('<div class="hr-tiles">' + "".join(
         f'<div class="hr-tile"><div class="big">{big}</div><div class="lbl">{lbl}</div></div>'
         for big, lbl in tiles) + "</div>")
 
     left, right = st.columns([1, 1.05], gap="large")
     with left:
-        html('<div class="hr-h">Why use a model at all</div>')
-        html(f"""<div class="hr-copy">One capacity search takes about {SOLVES_PER_SEARCH} power
-flows. A map that holds in 95% of conditions needs that search for every bus under a thousand
-grid conditions. The model does the same search in a fraction of the time, and the solver then
-checks its answers. Try it: every bus under {RACE_CONDITIONS} grid conditions.</div>""")
+        html('<div class="hr-h">Why use AI at all</div>')
+        html(f"""<div class="hr-copy">One capacity search takes about {SOLVES_PER_SEARCH} physics
+checks. A map that holds in 95% of conditions needs that search for every connection point under a
+thousand grid conditions. The AI does the same search in a fraction of the time, and the physics
+engine then checks its answers. Try it: every point under {RACE_CONDITIONS} grid
+conditions.</div>""")
         start = st.button(f"Run {len(mv_buses) * RACE_CONDITIONS:,} capacity searches",
                           key="race")
         slot = st.empty()
@@ -776,7 +843,7 @@ checks its answers. Try it: every bus under {RACE_CONDITIONS} grid conditions.</
         if near:
             html(f"""<div class="hr-note" style="margin-top:.2rem">Close to a limit, where a
 small error can flip the answer, it still agrees {near['accuracy']:.1%} of the time
-({near['cases']:,} cases). The model is never trusted alone: the solver rechecks every
+({near['cases']:,} cases). The AI is never trusted alone: the physics engine rechecks every
 capacity.</div>""")
     with right:
         if plot_file.exists():
@@ -824,12 +891,20 @@ buses against their true electrical distance. The flat drawing is metric multidi
 it.</div>""")
         state_line = (f"{mw:g} MW of new solar at bus {bus}" if mw > 0 else "no new solar")
         html(f'<div class="hr-where" style="margin-top:.4rem">Colours and moving dots show the same '
-             f'power flow as Try a project: {state_line}, {condition.lower()} conditions.</div>')
+             f'physics check as Try a project: {state_line}, {condition.lower()} conditions.</div>')
         label = f"Add {DEMO_MW:g} MW of solar at bus {bus}" if mw == 0 else "Remove the solar"
         st.button(label, key="toggle_space", on_click=toggle_solar)
 
 
 view = st.session_state.view
+intro_col, how_col = st.columns([2.4, 1], gap="large")
+with intro_col:
+    html(f'<div class="hr-intro">{INTROS.get(view, "")}</div>')
+with how_col:
+    # A popover floats over the page, so opening it doesn't push the view down.
+    with st.popover("How Headroom works", width="stretch"):
+        st.markdown(HOW_IT_WORKS)
+
 if view == "Capacity map":
     capacity_map()
 elif view == "Electrical space":

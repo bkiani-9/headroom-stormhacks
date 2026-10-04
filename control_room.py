@@ -206,7 +206,7 @@ def _flows(net, layout, dim=False):
             "mw": round(abs(p), 3),
             "stroke": LINE_DIM if dim else _line_colour(loading),
             "title": f"Line {line}",
-            "detail": f"{abs(p):.2f} MW {way}, loaded {loading:.0f}%",
+            "detail": f"{abs(p):.2f} MW {way}, {loading:.0f}% of its capacity",
         })
     return out
 
@@ -219,14 +219,14 @@ def _substations(net, layout):
         loading = float(net.res_trafo.loading_percent[trafo])
         rating = float(net.trafo.sn_mva[trafo])
         if p >= 0:
-            flow = f"taking {p:.1f} MW from the 110 kV grid"
+            flow = f"taking {p:.1f} MW from the high-voltage grid (110 kV)"
         else:
-            flow = f"sending {-p:.1f} MW back up to the 110 kV grid"
+            flow = f"sending {-p:.1f} MW back up to the high-voltage grid (110 kV)"
         out.append({
             "note": f"{loading:.0f}% loaded",
             "over": loading > MAX_LOADING_PERCENT,
             "title": f"{s['label']} (bus {s['bus']})",
-            "detail": f"{rating:.0f} MVA transformer, {loading:.0f}% loaded, {flow}",
+            "detail": f"{rating:.0f} MVA transformer, {loading:.0f}% of its capacity, {flow}",
         })
     return out
 
@@ -250,18 +250,20 @@ def explore_board(net, layout, selected, mw, solve_ms=None):
         vm = float(net.res_bus.vm_pu[b["id"]])
         used, colour, state = _voltage_bus(vm)
         sub, hops = where[b["id"]]
+        rise = (vm - NOMINAL_PU) * 100
+        voltage = f"{abs(rise):.1f}% {'above' if rise >= 0 else 'below'} normal"
         buses.append({"bar": round(min(max(used, 0.0), 1.0), 3), "colour": colour,
                       "state": state, "title": f"Bus {b['id']}",
-                      "detail": f"Voltage {vm:.4f} pu (limit {MAX_VOLTAGE_PU}), "
-                                f"{hops} lines from {sub}"})
+                      "detail": f"Voltage {voltage} (limit {(MAX_VOLTAGE_PU - NOMINAL_PU) * 100:.0f}% "
+                                f"above), {hops} lines from {sub}"})
     legend = [
-        {"line": GREEN, "label": f"Line under {BUSY_FROM:.0f}% loaded"},
+        {"line": GREEN, "label": f"Power line under {BUSY_FROM:.0f}% of its capacity"},
         {"line": ORANGE, "label": f"{BUSY_FROM:.0f} to {MAX_LOADING_PERCENT:.0f}%"},
         {"line": RED, "label": "Overloaded"},
-        {"bar": True, "label": f"Bar in a bus: voltage room used, red over {MAX_VOLTAGE_PU} pu"},
-        {"dots": True, "label": "Power flow, faster for more MW"},
+        {"bar": True, "label": "Bar in each box: voltage room used up, red past the limit"},
+        {"dots": True, "label": "Moving dots: power flow, faster for more power"},
     ]
-    foot = f"AC power flow: {solve_ms:.0f} ms" if solve_ms else ""
+    foot = f"Physics check: {solve_ms:.0f} ms" if solve_ms else ""
     label = f"Bus {selected}" + (f": +{mw:g} MW solar" if mw > 0 else "")
     return {"layout": layout, "mode": "explore", "selected": int(selected), "label": label,
             "buses": buses, "lines": _flows(net, layout), "subs": _substations(net, layout),
