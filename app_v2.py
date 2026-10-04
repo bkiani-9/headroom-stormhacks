@@ -10,7 +10,6 @@ import re
 import struct
 import time
 import zlib
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -20,6 +19,7 @@ import ml
 import sunlight
 from sunny_day import day_profile, play_day
 from hyperbolic import disk_data, disk_layout, measure_fit, show_disk
+from globe import show_globe
 from capacity_data import CAPACITY95_FILE, CAPACITY_FILE, read_capacity, read_capacity95
 from control_room import (GREEN, ORANGE, RED, SUN, board_layout, capacity_board, explore_board,
                           flows_outward, path_lines, show_board, substation_of)
@@ -456,88 +456,6 @@ def sky_chart(marked_utc=(), mark_label="", caption=""):
     peak = float(grid.max())
     return (f'<div class="hr-sky">{sky_axes(sky_uri(grid, peak, marked_utc))}'
             f'{sky_keys(peak, mark_label)}<div class="hr-note">{caption}</div></div>')
-
-
-# The globe faces Europe and Africa; Terra and Aqua fly sun-synchronous
-# polar orbits inclined 98.2 degrees.
-GLOBE_FACING = (38.0, 8.0)
-POLAR_INCLINATION = 98.2
-WORLD_FILE = Path(__file__).parent / "results" / "world_land.json"
-
-
-def orthographic(lat, lon, size, radius):
-    """Points (degrees) on a globe drawn `radius` px wide in a `size` px box.
-    Returns x, y and whether each point faces us; points on the far side are
-    moved to the globe's edge, so land shapes that cross it stay closed."""
-    lat0, lon0 = np.radians(GLOBE_FACING)
-    phi, lam = np.radians(np.asarray(lat, float)), np.radians(np.asarray(lon, float))
-    front = np.sin(lat0) * np.sin(phi) + np.cos(lat0) * np.cos(phi) * np.cos(lam - lon0) > 0
-    x = np.cos(phi) * np.sin(lam - lon0)
-    y = np.cos(lat0) * np.sin(phi) - np.sin(lat0) * np.cos(phi) * np.cos(lam - lon0)
-    norm = np.hypot(x, y)
-    norm[norm == 0] = 1
-    x, y = np.where(front, x, x / norm), np.where(front, y, y / norm)
-    return size / 2 + radius * x, size / 2 - radius * y, front
-
-
-def visible_runs(lat, lon, size, radius):
-    """SVG path data for the parts of a line that face us."""
-    x, y, front = orthographic(lat, lon, size, radius)
-    parts, run = [], []
-    for xi, yi, f in zip(x, y, front):
-        if f:
-            run.append(f"{xi:.1f},{yi:.1f}")
-        elif run:
-            parts.append(run)
-            run = []
-    if run:
-        parts.append(run)
-    return " ".join("M" + " L".join(r) for r in parts if len(r) > 1)
-
-
-@st.cache_data
-def globe_svg(world_changed, grid_lat, grid_lon):
-    """The Earth from space, with the grid's location and a polar orbit over it."""
-    size, radius = 300, 138
-    land = []
-    for ring in json.loads(WORLD_FILE.read_text())["rings"]:
-        ring = np.array(ring)
-        x, y, front = orthographic(ring[:, 1], ring[:, 0], size, radius)
-        if front.any():
-            land.append("M" + " L".join(f"{a:.1f},{b:.1f}" for a, b in zip(x, y)) + "Z")
-    steps = np.linspace(-180, 180, 181)
-    lines = [visible_runs(np.full_like(steps, la), steps, size, radius) for la in (-60, -30, 0, 30, 60)]
-    lines += [visible_runs(np.linspace(-90, 90, 91), np.full(91, lo), size, radius)
-              for lo in range(-180, 180, 30)]
-    # The polar orbit: the great circle through the grid with Terra's and Aqua's inclination.
-    phi, lam = np.radians(grid_lat), np.radians(grid_lon)
-    p = np.array([np.cos(phi) * np.cos(lam), np.cos(phi) * np.sin(lam), np.sin(phi)])
-    east = np.array([-np.sin(lam), np.cos(lam), 0.0])
-    north = np.array([-np.sin(phi) * np.cos(lam), -np.sin(phi) * np.sin(lam), np.cos(phi)])
-    heading = np.arcsin(np.cos(np.radians(POLAR_INCLINATION)) / np.cos(phi))
-    ahead = np.cos(heading) * north + np.sin(heading) * east
-    t = np.radians(np.arange(-180, 181, 1.0))
-    orbit = np.cos(t)[:, None] * p + np.sin(t)[:, None] * ahead
-    o_lat = np.degrees(np.arcsin(np.clip(orbit[:, 2], -1, 1)))
-    o_lon = np.degrees(np.arctan2(orbit[:, 1], orbit[:, 0]))
-    track = visible_runs(o_lat, o_lon, size, radius)
-    gx, gy, _ = orthographic([grid_lat], [grid_lon], size, radius)
-    k = int(np.argmin(np.abs(np.degrees(t) - 14)))  # the satellite, 14 degrees along its track
-    sx, sy, _ = orthographic([o_lat[k]], [o_lon[k]], size, radius)
-    sx, sy = sx[0], sy[0]
-    return f"""<svg viewBox="0 0 {size} {size}" role="img"
-aria-label="The Earth from space, with the grid's location in the Upper Rhine valley and a polar orbit passing over it">
-<defs><radialGradient id="hrSea" cx="42%" cy="38%" r="70%"><stop offset="0" stop-color="#16324A"/>
-<stop offset="1" stop-color="#0A1622"/></radialGradient></defs>
-<circle cx="{size / 2}" cy="{size / 2}" r="{radius}" fill="url(#hrSea)" stroke="#35506A" stroke-width="1"/>
-<path d="{' '.join(lines)}" fill="none" stroke="#1F3A52" stroke-width=".7"/>
-<path d="{' '.join(land)}" fill="#2E3B2F" stroke="#5E7462" stroke-width=".6" stroke-linejoin="round"/>
-<path d="{track}" fill="none" stroke="#9CC8F0" stroke-width="1.3" stroke-dasharray="4 3"/>
-<g transform="translate({sx:.1f},{sy:.1f})"><rect x="-3.5" y="-2.5" width="7" height="5" rx="1" fill="#E8EEF4"/>
-<rect x="-13" y="-1.6" width="8" height="3.2" fill="#6FA8DC"/><rect x="5" y="-1.6" width="8" height="3.2" fill="#6FA8DC"/></g>
-<circle cx="{gx[0]:.1f}" cy="{gy[0]:.1f}" r="7" fill="none" stroke="{SUN}" stroke-width="1.4" opacity=".7"/>
-<circle cx="{gx[0]:.1f}" cy="{gy[0]:.1f}" r="3" fill="{SUN}"/>
-</svg>"""
 
 
 @st.cache_data
@@ -1250,17 +1168,18 @@ the Haurwitz clear-sky model. Curtailment only bites in full sun, so the clouds 
 rule open so many more connection points.</div></div>
 {tiles}""")
     with right, st.container(key="orbit_text"):
-        html(f"""<div class="hr-h" style="margin-top:0">Where the data comes from</div>
-<div class="hr-globe">{globe_svg(file_time(WORLD_FILE), lat, lon)}</div>
-<div class="hr-copy">NASA's CERES instruments on the Terra and Aqua satellites measure the sunlight
-Earth reflects, and geostationary weather satellites track the clouds hour by hour. NASA turns both
-into hourly sunlight at the ground (CERES SYN1deg, through NASA POWER).</div>
+        html('<div class="hr-h" style="margin:0 0 .3rem">Where the data comes from</div>')
+        show_globe(lat, lon)
+        html(f"""<div class="hr-copy">NASA's CERES instruments on the Terra and Aqua satellites measure
+the sunlight Earth reflects, and geostationary weather satellites track the clouds hour by hour. NASA
+turns both into hourly sunlight at the ground (CERES SYN1deg, through NASA POWER).</div>
 <div class="hr-globe cell">{cell_svg(lat, lon, points)}</div>
 <div class="hr-copy">NASA's data comes in cells of 1° × 1°, about 111 × 74 km here. All 177
 connection points sit inside one cell, so one series of sunlight covers the whole grid.</div>
-<div class="hr-note">The orbit is drawn for illustration: a polar orbit like Terra's and Aqua's,
-inclined 98°. The sunlight was downloaded once with requests, read with pandas and stored with the
-app, so it runs offline. Map: Natural Earth.</div>""")
+<div class="hr-note">The orbit and its speed are for illustration: tilted 98° like Terra's and
+Aqua's, but a real polar orbit passes over a given place about twice a day, not on every lap. The
+sunlight was downloaded once with requests, read with pandas and stored with the app, so it runs
+offline. Map: Natural Earth.</div>""")
 
 
 view = st.session_state.view
