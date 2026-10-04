@@ -66,6 +66,36 @@ def predict(models, x):
     return pd.DataFrame({t: models[t].predict(x) for t in TARGETS}, index=x.index)
 
 
+def model_capacity_bisect(models, bus_features, cases, max_mw=20.0):
+    """Model-predicted capacity for each row of `cases` (columns bus,
+    load_level, gen_level), by bisection in 0.1 MW steps: the same search
+    as find_capacity, with the model in place of the power flow. About 8
+    model calls per case instead of 201, so it suits very many cases.
+    """
+    cases = cases.reset_index(drop=True)
+    top = int(round(max_mw * 10))
+
+    def ok(tenths):
+        x = cases.copy()
+        x["solar_mw"] = tenths / 10
+        return passes(predict(models, add_features(x, bus_features))).to_numpy()
+
+    low = np.zeros(len(cases), dtype=int)
+    high = np.full(len(cases), top)
+    fails_at_zero = ~ok(low)
+    passes_at_top = ok(high)
+    active = ~fails_at_zero & ~passes_at_top
+    while active.any():
+        mid = (low + high) // 2
+        good = ok(mid)
+        low = np.where(active & good, mid, low)
+        high = np.where(active & ~good, mid, high)
+        active &= (high - low) > 1
+    capacity = np.where(passes_at_top, top, low) / 10
+    capacity = np.where(fails_at_zero, 0.0, capacity)
+    return pd.Series(capacity, index=cases.index)
+
+
 def model_capacity(models, bus_features, cases, max_mw=20.0, step=0.1, batch=1000):
     """Model-predicted capacity for each row of `cases` (columns bus,
     load_level, gen_level): the largest size, in 0.1 MW steps, below the
