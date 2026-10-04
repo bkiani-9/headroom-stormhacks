@@ -19,6 +19,9 @@ from pathlib import Path
 import pandas as pd
 
 CAPACITY_FILE = Path(__file__).parent / "results" / "capacity.csv"
+# The 95% map from capacity95.py: bus, capacity95_mw, pass_share,
+# model95_mw, limit (the most common limit just above that size).
+CAPACITY95_FILE = Path(__file__).parent / "results" / "capacity95.csv"
 HEADLINE_MW = 2.0  # headline project size, from decisions.md
 
 
@@ -26,6 +29,14 @@ def read_capacity(path=CAPACITY_FILE):
     """Read the capacity file into a table indexed by bus."""
     table = pd.read_csv(path, dtype={"limit": str}, keep_default_na=False)
     return table.set_index("bus")[["capacity_mw", "limit"]]
+
+
+def read_capacity95(path=CAPACITY95_FILE):
+    """Read the 95% map into the same shape as read_capacity, plus the
+    share of sampled conditions that pass at that size."""
+    table = pd.read_csv(path, dtype={"limit": str}, keep_default_na=False)
+    table = table.rename(columns={"capacity95_mw": "capacity_mw"})
+    return table.set_index("bus")[["capacity_mw", "limit", "pass_share"]]
 
 
 def count_can_take(table, mw):

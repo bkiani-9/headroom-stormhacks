@@ -234,18 +234,23 @@ def capacity_figure(net, capacity, max_mw, selected_bus=None, placeholder=False)
     with_data = [b for b in buses if b in capacity.index]
     without = [b for b in buses if b not in capacity.index]
 
+    # A 95% map carries the share of sampled conditions that pass.
+    in_95 = "pass_share" in capacity.columns
     hover = []
     for b in with_data:
         mw = capacity.capacity_mw[b]
         limit = capacity.limit[b]
         if isinstance(limit, str) and limit.strip():
-            stop = f"Stopped by: {limit}"
+            stop = f"{'Most often stopped' if in_95 else 'Stopped'} by: {limit}"
         else:
             stop = f"Nothing breaks up to {max_mw:g} MW"
-        hover.append(
-            f"<b>{net.bus.name[b]}</b> (bus {b})<br>"
-            f"Capacity {mw:.1f} MW<br>{stop}{note}"
-        )
+        if in_95:
+            text = (f"Capacity in 95% of conditions: {mw:.1f} MW<br>"
+                    f"Passes in {capacity.pass_share[b]:.1%} of sampled conditions "
+                    f"(solver-checked)<br>{stop}")
+        else:
+            text = f"Capacity {mw:.1f} MW<br>{stop}"
+        hover.append(f"<b>{net.bus.name[b]}</b> (bus {b})<br>{text}{note}")
     traces.append(go.Scatter(
         x=[bus_xy(net, b)[0] for b in with_data],
         y=[bus_xy(net, b)[1] for b in with_data],

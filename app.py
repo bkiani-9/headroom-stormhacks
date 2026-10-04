@@ -5,8 +5,9 @@ import streamlit as st
 
 import ml
 from capacity import MAX_SEARCH_MW
-from capacity_data import (CAPACITY_FILE, HEADLINE_MW, count_can_take,
-                           placeholder_capacity, read_capacity)
+from capacity_data import (CAPACITY95_FILE, CAPACITY_FILE, HEADLINE_MW,
+                           count_can_take, placeholder_capacity, read_capacity,
+                           read_capacity95)
 from engine import (MAX_VOLTAGE_PU, add_project, check, farthest_bus,
                     load_grid, solve)
 from network_plot import capacity_figure, network_figure, voltage_used
@@ -41,6 +42,11 @@ def with_solar(bus, mw):
 @st.cache_data
 def capacity_from_file(last_changed):
     return read_capacity()
+
+
+@st.cache_data
+def capacity95_from_file(last_changed):
+    return read_capacity95()
 
 
 @st.cache_data
@@ -100,7 +106,7 @@ selected = st.session_state.bus
 # Streamlit forgets a widget's value on any run where it isn't drawn. The
 # slider and before/after switch are only drawn in one view, so copy their
 # values over each run to keep them when switching views and back.
-for key in ["mw", "view"]:
+for key in ["mw", "view", "cap_map"]:
     if key in st.session_state:
         st.session_state[key] = st.session_state[key]
 
@@ -228,18 +234,26 @@ def show_headline(saved):
             "project) appears once `results/capacity.csv` exists."
         )
         return
-    st.metric(
-        f"Buses that can take a {HEADLINE_MW:g} MW solar project",
-        f"{count_can_take(saved, HEADLINE_MW)} of {len(saved)}",
-    )
+    label = f"Buses that can take a {HEADLINE_MW:g} MW solar project"
+    if saved95 is None:
+        st.metric(label, f"{count_can_take(saved, HEADLINE_MW)} of {len(saved)}")
+        return
+    st.markdown(f"**{label}**")
+    c1, c2 = st.columns(2)
+    c1.metric("In 95% of grid conditions (solver-checked)",
+              f"{count_can_take(saved95, HEADLINE_MW)} of {len(saved95)}")
+    c2.metric("On today's grid (low load, high existing solar)",
+              f"{count_can_take(saved, HEADLINE_MW)} of {len(saved)}")
 
 
 def show_capacity_view(saved, error):
-    """How much solar each bus can take, read from results/capacity.csv."""
+    """How much solar each bus can take, read from results/capacity.csv
+    (today's grid) or results/capacity95.csv (95% of conditions)."""
     if error:
         st.error(error)
         return
     placeholder = saved is None
+    in_95 = False
     if placeholder:
         capacity = fake_capacity(tuple(mv_buses))
         st.warning(
@@ -247,6 +261,13 @@ def show_capacity_view(saved, error):
             "pattern, not grid results. The real ones will appear once "
             "`results/capacity.csv` exists."
         )
+    elif saved95 is not None:
+        choice = st.radio(
+            "Capacity map", ["In 95% of grid conditions", "On today's grid"],
+            horizontal=True, key="cap_map",
+        )
+        in_95 = choice.startswith("In 95%")
+        capacity = saved95 if in_95 else saved
     else:
         capacity = saved
 
@@ -255,23 +276,37 @@ def show_capacity_view(saved, error):
         st.selectbox("Bus", mv_buses, key="bus", format_func=bus_label)
         st.caption("Or click a bus on the map.")
         if selected in capacity.index:
-            st.metric("Capacity", f"{capacity.capacity_mw[selected]:.1f} MW")
+            st.metric("Capacity in 95% of conditions" if in_95 else "Capacity",
+                      f"{capacity.capacity_mw[selected]:.1f} MW")
             limit = capacity.limit[selected]
             if limit.strip():
-                st.write(f"Stopped by: {limit}")
+                st.write(f"{'Most often stopped' if in_95 else 'Stopped'} by: {limit}")
             else:
                 st.write(f"Nothing breaks up to {MAX_SEARCH_MW:g} MW.")
+            if in_95:
+                st.caption(
+                    f"At this size, {capacity.pass_share[selected]:.1%} of 200 "
+                    "sampled grid conditions pass, checked with the real power flow."
+                )
             if placeholder:
                 st.caption("Placeholder data, not real.")
         else:
             st.write("No capacity data for this bus.")
 
-    st.subheader("How much solar each bus can take")
-    st.caption(
-        "Each bus is coloured by its capacity: the largest solar project it "
-        "takes without breaking a limit. Red is little room, green is plenty. "
-        "Hover for the capacity and the limit that stops it."
-    )
+    if in_95:
+        st.subheader("How much solar each bus can take in 95% of grid conditions")
+        st.caption(
+            "Load 10-60% and existing solar 0-80%, 200 sampled conditions. The "
+            "ML model proposes each bus's size and the real power flow checks "
+            "it passes in at least 95% of them. Red is little room, green is plenty."
+        )
+    else:
+        st.subheader("How much solar each bus can take")
+        st.caption(
+            "Each bus is coloured by its capacity: the largest solar project it "
+            "takes without breaking a limit. Red is little room, green is plenty. "
+            "Hover for the capacity and the limit that stops it."
+        )
     st.plotly_chart(
         capacity_figure(net, capacity, MAX_SEARCH_MW, selected, placeholder),
         key=MAP_KEY, on_select="rerun", selection_mode="points",
@@ -279,6 +314,8 @@ def show_capacity_view(saved, error):
 
 
 saved, capacity_error = saved_capacity()
+saved95 = (capacity95_from_file(CAPACITY95_FILE.stat().st_mtime)
+           if CAPACITY95_FILE.exists() else None)
 show_headline(saved)
 
 def show_model_view():

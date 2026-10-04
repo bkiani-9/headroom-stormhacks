@@ -3,12 +3,12 @@
 Hacking started 12:00 pm Saturday. Times are deadlines.
 
 ## Must-haves
-- [ ] 1. Grid solves in the app and shows about 1.0232 (**H1, 1:00 pm**)
-- [ ] 2. Limit check: the base case passes and 20 MW at a far bus fails; a rough version works end to end (**H3, 3:00 pm**)
-- [ ] 3. Map that reacts: click a point, drag the slider, the map recolours; before/after toggle (**H8, 8:00 pm**)
-- [ ] 4. My capacity search and the heatmap: hovering shows the limit that stops each point (**H11, 11:00 pm**)
-- [ ] 5. ML model: trained on solver runs, with an error report and a model-versus-solver plot (**H14, 2:00 am**)
-- [ ] 6. 95% capacity map: physics recheck, snapshot/95% toggle and the headline number (**H16, 4:00 am, feature freeze**)
+- [x] 1. Grid solves in the app and shows about 1.0232 (**H1, 1:00 pm**)
+- [x] 2. Limit check: the base case passes and 20 MW at a far bus fails; a rough version works end to end (**H3, 3:00 pm**)
+- [x] 3. Map that reacts: click a point, drag the slider, the map recolours; before/after toggle (**H8, 8:00 pm**)
+- [x] 4. My capacity search and the heatmap: hovering shows the limit that stops each point (**H11, 11:00 pm**)
+- [x] 5. ML model: trained on solver runs, with an error report and a model-versus-solver plot (**H14, 2:00 am**)
+- [x] 6. 95% capacity map: physics recheck, snapshot/95% toggle and the headline number (**H16, 4:00 am, feature freeze**)
 
 ## ML design for step 5 (APPROVED)
 
@@ -20,8 +20,23 @@ solved once with the real power flow. It records the highest voltage,
 line loading and transformer loading, and pass or fail.
 The capacity-per-condition run below is paused at 4 of 44 conditions
 (results/capacity_scenarios.csv; rerun run_scenarios.py to resume).
-The model target and test plan below still describe the old data and
-need agreeing again for the new data.
+
+**As built (Saturday evening), replacing the target and tests below:**
+- Data: 60,000 solved scenarios: the 20,000 random ones, plus 20,000
+  sized near the model's pass/fail boundary (scenarios_boundary.csv)
+  and 20,000 near-boundary with load/generation weighted to the ends of
+  their ranges (scenarios_edges.csv).
+- Model: three HistGradientBoostingRegressor models (train_model.py)
+  predicting highest voltage, busiest line loading and busiest
+  transformer loading from per-bus facts (bus_features.csv) plus size,
+  load and generation; pass/fail from the decisions.md limits. No
+  power flow needed. Saved to results/headroom_model.joblib.
+- Tests: random 80/20 split, with a "close to a limit" breakdown, and
+  capacity against find_capacity at the 4 corner conditions
+  (results/model_report.md, model_vs_solver.png).
+- Step 6 (capacity95.py): 200 sampled conditions; the model proposes
+  each bus's 95% size, the real power flow rechecks it under all 200
+  and steps 0.1 MW up or down until exact (results/capacity95.csv).
 
 Goal: a model that predicts a bus's hosting capacity under any grid
 condition in milliseconds, so step 6 can sample hundreds of conditions per
