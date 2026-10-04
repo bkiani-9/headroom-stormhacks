@@ -67,21 +67,42 @@ INTROS = {
              "never saw, and raced against it.",
 }
 HOW_IT_WORKS = """
-1. **A real kind of grid.** A 20 kV distribution grid in Germany (pandapower's MV Oberrhein
-   model): 177 connection points, 2 substations and 153 solar plants already connected.
-2. **A physics engine.** For any new project, an AC power flow, the standard calculation grid
-   operators use, works out every voltage and how full every line is. It's the reference
-   answer, but each check takes a moment.
-3. **An AI model for speed.** Trained on 60,000 physics checks, it answers almost instantly,
-   so it can search the whole grid under thousands of conditions.
-4. **Physics has the last word.** Every capacity on the maps was rechecked with the physics
-   engine.
+**How to use it**
 
-**Three ways to connect a project**
-- **Firm:** it fits even at the worst moment of the year.
-- **Flexible:** it fits in 95% of grid conditions, and is held back in the rest.
-- **3% rule:** German grid operators may plan on curtailing up to 3% of a plant's yearly
-  energy (§11(2) EnWG). Headroom works this out hour by hour with 2024 NASA satellite sunlight.
+**Try a project**
+1. Pick a connection point in the *Connection point (bus)* list, or click any box on the diagram.
+2. Set the size with *Size of the new solar project*, or click *Add 3 MW of solar*.
+3. Choose a *Grid condition*: worst case (sunny and quiet, the hardest test), typical or best case.
+4. Read the result. The three lights turn red when a limit breaks, and the sentence under the
+   buttons says which kinds of connection fit.
+5. *Play a sunny day* replays the sunniest day of 2024 hour by hour. *Check a year of real
+   sunlight* counts the hours of 2024 the project would need curtailing.
+
+**Capacity map:** set *Project size at every connection point* and pick a layer. Green fits
+firm, orange fits with a flexible connection, yellow fits under the 3% rule, and red can't take
+it. Hover over a box for its numbers, or click it to select it.
+
+**From orbit:** scroll down. NASA's satellite sunlight for 2024 against a cloudless year, what
+the clouds change, where the data comes from (drag the globe), and the grid inside one data cell.
+
+**Electrical space:** the grid drawn by electrical distance. Drag to glide through it, click a
+bus to travel there, and press *Flat* to compare it with an ordinary drawing.
+
+**Proof:** press *Run 17,700 capacity searches* to race the AI against the physics engine, then
+scroll through the four test graphs.
+
+**How it works**
+- **The grid:** a real kind of 20 kV grid in Germany (pandapower's MV Oberrhein model): 177
+  connection points, 2 substations and 153 solar plants already connected.
+- **The physics engine:** an AC power flow, the standard calculation grid operators use. It
+  checks every voltage (at most 4% above normal) and every line and transformer (at most
+  100% full).
+- **The AI model:** trained on 60,000 physics checks, it answers almost instantly. The physics
+  engine rechecks every capacity on the maps.
+- **Three ways to connect:** firm fits even at the worst moment of the year. Flexible fits in
+  95% of grid conditions and is held back in the rest. Under the 3% rule, German grid operators
+  may plan on curtailing up to 3% of a plant's yearly energy (§11(2) EnWG); Headroom works
+  this out hour by hour with 2024 NASA satellite sunlight.
 
 **Who it's for:** grid operators deciding where new solar can connect, and developers and
 community energy groups planning projects.
@@ -196,7 +217,8 @@ def file_time(path):
 # after the app restarts. The sunlight file's time is part of the key.
 @st.cache_data(persist="disk", show_spinner=False)
 def sunlight_year(bus, mw, sunlight_file_time):
-    """A year of real 2024 sunlight at `bus` with `mw` of solar (sunlight.py)."""
+    """A year of real 2024 sunlight at `bus` with `mw` of solar (sunlight.py): the
+    physics engine finds the sun level where a limit first breaks, about 14 solves."""
     models, features = model_and_features()
     return sunlight.year_check(bus, mw, models, features)
 
@@ -252,7 +274,7 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .stApp { background: #0A0A0A; }
 [data-testid="stHeader"] { background: transparent; height: 0; }
 [data-testid="stDecoration"] { display: none; }
-[data-testid="stMainBlockContainer"] { padding: 1rem 1.5rem 1.4rem; max-width: 1720px; }
+[data-testid="stMainBlockContainer"] { padding: 1rem 1.5rem 55vh; max-width: 1720px; }
 [data-testid="stVerticalBlock"] { gap: .8rem; }
 [data-testid="stWidgetLabel"] p { font-size: .9rem; color: var(--ink3); }
 .st-key-toggle button, .st-key-race button, .st-key-play_day button, .st-key-toggle_space button { border: 1.5px solid #A0A0A0; border-radius: 12px;
@@ -336,7 +358,8 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-plot { width: fit-content; max-width: 100%; }
 .hr-plot img { width: auto; max-width: 100%; max-height: max(420px, calc(100vh - 330px)); }
 .hr-last { margin-bottom: 1rem; }
-.st-key-controls { border-top: 1px solid #2A2A2A; padding-top: 1rem; margin-top: .3rem; }
+.st-key-controls { border-bottom: 1px solid #262626; padding-bottom: .4rem; margin-bottom: .1rem; }
+.st-key-map_controls { border-bottom: 1px solid #262626; padding-bottom: .4rem; }
 .st-key-sun_check button { border: 1.5px solid #A0A0A0; border-radius: 12px; background: transparent;
                            padding: .4rem 1.1rem; min-height: 0; }
 .st-key-sun_check button:hover { border-color: #FFFFFF; background: #1A1A1A; }
@@ -406,37 +429,25 @@ html.hr-settled [class*="st-key-view_"] > :nth-child(n+4) { animation-delay: .38
 @keyframes hrRiseLate { from { opacity: 0; transform: translateY(46px) scale(.985); filter: blur(7px); } }
 /* Sections and panels further down rise into view as you scroll to them. */
 @supports (animation-timeline: view()) {
-  [class*="st-key-orbit_s"], [class*="st-key-proof_s"], [class*="st-key-proof_g"], .st-key-controls,
+  [class*="st-key-orbit_s"], [class*="st-key-proof_s"], [class*="st-key-proof_g"],
   .hr-count:not([class*="st-key-orbit_s"] .hr-count), .hr-lamps, .hr-race {
     animation: hrReveal linear both; animation-timeline: view(); animation-range: entry 0% cover 34%; }
 }
 @keyframes hrReveal { from { opacity: 0; transform: translateY(90px) scale(.95); }
                       to { opacity: 1; transform: none; } }
-/* The year charts on From orbit shimmer a little, like sunlight. */
-.hr-sky.orbit .plot img { animation: hrFlicker 5.2s ease-in-out infinite; }
-.hr-sky.orbit.clear .plot img { animation-duration: 6.6s; animation-delay: -2.4s; }
-.hr-sky.orbit .plot::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2.9rem; right: 0;
-  pointer-events: none; border-radius: 3px; mix-blend-mode: screen; background-size: 240% 100%;
-  background-image: linear-gradient(100deg, rgba(255,240,190,0) 38%, rgba(255,240,190,.18) 50%, rgba(255,240,190,0) 62%);
-  animation: hrSheen 7.5s linear infinite; }
-.hr-sky.orbit.clear .plot::after { animation-delay: -3.7s; }
-@keyframes hrFlicker { 0%, 100% { filter: brightness(1); } 7% { filter: brightness(1.17) saturate(1.1); }
-  9% { filter: brightness(.9); } 12% { filter: brightness(1.08); } 16% { filter: brightness(1); }
-  55% { filter: brightness(1.04); } 59% { filter: brightness(1.15) saturate(1.08); } 61% { filter: brightness(.93); }
-  64% { filter: brightness(1.05); } 70% { filter: brightness(1); } }
-@keyframes hrSheen { from { background-position: 130% 0; } to { background-position: -130% 0; } }
 .st-key-hr_motion { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .hr-veil { display: none; }
   [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > *, [class*="st-key-view_"] > *,
   [class*="st-key-orbit_s"], [class*="st-key-proof_s"], [class*="st-key-proof_g"], .hr-count, .hr-lamps,
-  .hr-race, .st-key-controls, .hr-sky.orbit .plot img, .hr-sky.orbit .plot::after { animation: none !important; }
+  .hr-race, .st-key-controls { animation: none !important; }
 }
 /* Sections: one idea per screen, with room to breathe. */
 [class*="st-key-orbit_s"], [class*="st-key-proof_g"] { padding: 2.2rem 0 1.6rem; border-top: 1px solid #262626; }
 .st-key-orbit_s1 { padding-top: 0; border-top: 0; }
 .hr-sky.orbit .plot img { height: 170px; }
-.hr-graph { border-radius: 14px; border: 1px solid var(--edge); background: #0F0F0F; padding: 12px; }
+.hr-graph { border-radius: 14px; border: 1px solid var(--edge); background: #0F0F0F; padding: 10px;
+             max-width: 500px; margin: 0 auto; }
 .hr-graph img { display: block; width: 100%; height: auto; filter: invert(.94) contrast(1.12); border-radius: 6px; }
 .hr-globe.cell svg { max-width: 640px; margin: 0 auto; }
 </style>
@@ -875,6 +886,35 @@ def try_a_project():
         data["play"] = st.session_state.play_id
         data["day_label"] = long_label
         day_text = day_story(short, hours, bus, mw)
+    # The controls sit above the diagram, so it stays in view while you change them.
+    controls = st.container(key="controls")
+    c1, c2, c3 = controls.columns([1, 1.2, 1.2], gap="large")
+    with c1:
+        pick_bus()
+        html(f'<div class="hr-where">{where_line(bus)}</div>')
+    with c2:
+        st.slider("Size of the new solar project", 0.0, 20.0, step=0.1, key="mw",
+                  format="%.1f MW")
+        if bus in caps.index:
+            row = caps.loc[bus]
+            scale = 20.0
+            # Longest bar first, so each shorter one sits on top of it.
+            layers = [(row.flex, ORANGE)] + ([(row.rule, SUN)] if has_rule else [])
+            layers.sort(key=lambda layer: -layer[0])
+            bars = "".join(f'<i style="width:{min(v / scale, 1) * 100:.1f}%;background:{c}"></i>'
+                           for v, c in layers)
+            rule_key = (f'<span><i style="background:{SUN}"></i>3% rule up to {row.rule:.1f} MW</span>'
+                        if has_rule else "")
+            html(f"""<div class="hr-gauge"><div class="wrap"><div class="track">{bars}
+<i style="width:{min(row.firm / scale, 1) * 100:.1f}%;background:{GREEN}"></i>
+</div><div class="mark" style="left:{min(mw / scale, 1) * 100:.1f}%"></div></div>
+<div class="scale"><span>0 MW</span><span>{scale:g} MW</span></div>
+<div class="keys"><span><i style="background:{GREEN}"></i>Firm up to {row.firm:.1f} MW</span>
+<span><i style="background:{ORANGE}"></i>Flexible up to {row.flex:.1f} MW</span>{rule_key}</div></div>""")
+    with c3:
+        st.segmented_control("Grid condition", list(CONDITIONS), key="condition",
+                             required=True, width="stretch")
+        html(f'<div class="hr-note">{CONDITION_NOTES[condition]}</div>')
     clicked = show_board(data)
     if clicked is not None and clicked != bus and clicked in mv_buses:
         st.session_state.bus = clicked
@@ -944,40 +984,13 @@ def try_a_project():
                            "cloudy days. "
                            + ("Red marks the hours this project would need curtailing." if n else
                               "No hour of 2024 would need curtailing at this size."))
+                ai = r["model_fail_hours"]
                 html(f'<div class="hr-where">With real 2024 sunlight (NASA satellite '
                      f'data), <b>{mw:g} MW</b> at bus {bus} would need curtailing in '
                      f'<b>{n:,}</b> of {r["daylight_hours"]:,} daylight '
-                     f'hours, if demand stayed as low as the worst case.</div>'
+                     f'hours, if demand stayed as low as the worst case. That count is the '
+                     f'physics engine\'s; the AI alone flagged {ai:,}.</div>'
                      + sky_chart(r["fail_times_utc"], "needs curtailing" if n else "", caption))
-
-    controls = st.container(key="controls")
-    c1, c2, c3 = controls.columns([1, 1.2, 1.2], gap="large")
-    with c1:
-        pick_bus()
-        html(f'<div class="hr-where">{where_line(bus)}</div>')
-    with c2:
-        st.slider("Size of the new solar project", 0.0, 20.0, step=0.1, key="mw",
-                  format="%.1f MW")
-        if bus in caps.index:
-            row = caps.loc[bus]
-            scale = 20.0
-            # Longest bar first, so each shorter one sits on top of it.
-            layers = [(row.flex, ORANGE)] + ([(row.rule, SUN)] if has_rule else [])
-            layers.sort(key=lambda layer: -layer[0])
-            bars = "".join(f'<i style="width:{min(v / scale, 1) * 100:.1f}%;background:{c}"></i>'
-                           for v, c in layers)
-            rule_key = (f'<span><i style="background:{SUN}"></i>3% rule up to {row.rule:.1f} MW</span>'
-                        if has_rule else "")
-            html(f"""<div class="hr-gauge"><div class="wrap"><div class="track">{bars}
-<i style="width:{min(row.firm / scale, 1) * 100:.1f}%;background:{GREEN}"></i>
-</div><div class="mark" style="left:{min(mw / scale, 1) * 100:.1f}%"></div></div>
-<div class="scale"><span>0 MW</span><span>{scale:g} MW</span></div>
-<div class="keys"><span><i style="background:{GREEN}"></i>Firm up to {row.firm:.1f} MW</span>
-<span><i style="background:{ORANGE}"></i>Flexible up to {row.flex:.1f} MW</span>{rule_key}</div></div>""")
-    with c3:
-        st.segmented_control("Grid condition", list(CONDITIONS), key="condition",
-                             required=True, width="stretch")
-        html(f'<div class="hr-note">{CONDITION_NOTES[condition]}</div>')
 
 
 def capacity_map():
@@ -987,6 +1000,14 @@ def capacity_map():
     second = caps.rule if rule else caps.flex
     check = rule_check(file_time(RULE_CHECK_FILE)) if rule else None
 
+    top = st.container(key="map_controls")
+    t1, t2 = top.columns([1, 1.5], gap="large", vertical_alignment="bottom")
+    with t1:
+        if has_rule:
+            st.segmented_control("Layer", LAYERS, key="cap_layer", required=True, width="stretch")
+    with t2:
+        st.slider("Project size at every connection point", 0.5, 20.0, step=0.5,
+                  key="cap_size", format="%.1f MW")
     clicked = show_board(capacity_board(base_grid(), board, size, caps.firm.to_dict(),
                                         second.to_dict(), bus, kind="rule" if rule else "flex",
                                         gains=caps.rule_gain.to_dict() if rule else None))
@@ -1000,10 +1021,6 @@ def capacity_map():
     total = len(caps)
     controls, counts = st.columns([1, 2.1], gap="large")
     with controls:
-        if has_rule:
-            st.segmented_control("Layer", LAYERS, key="cap_layer", required=True, width="stretch")
-        st.slider("Project size at every connection point", 0.5, 20.0, step=0.5,
-                  key="cap_size", format="%.1f MW")
         pick_bus()
         if bus in caps.index:
             row = caps.loc[bus]
@@ -1226,9 +1243,9 @@ before it goes on the map.</div>""")
                  f'<div class="hr-copy">{text}</div><div class="hr-where">{metric}</div>')
         with st.container(key=f"proof_g{i}"):
             if i % 2 == 0:
-                img_col, text_col = st.columns([1.3, 1], gap="large", vertical_alignment="center")
+                img_col, text_col = st.columns([1, 1.1], gap="large", vertical_alignment="center")
             else:
-                text_col, img_col = st.columns([1, 1.3], gap="large", vertical_alignment="center")
+                text_col, img_col = st.columns([1.1, 1], gap="large", vertical_alignment="center")
             with img_col:
                 html(image)
             with text_col:
