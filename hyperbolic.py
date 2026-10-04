@@ -186,7 +186,8 @@ def disk_layout(net, layout):
                       "fx": round(flat[n][0], 6), "fy": round(flat[n][1], 6),
                       "kind": kind,
                       "label": sub_label[n] if kind == "sub" else f"Bus {n}",
-                      "detail": (f"{z_sub[n]:.2f} ohms from {home[n]}, {hops[n]} lines out"
+                      "detail": (f"{z_sub[n]:.2f} ohms from {home[n]}, {hops[n]} "
+                                 f"line{'s' if hops[n] != 1 else ''} out"
                                  if kind == "bus" else "110/20 kV substation")})
     edges = [{"a": ROOT, "b": int(s), "kind": "trafo"} for s in children[ROOT]]
     edges += [{"a": int(e["parent"]), "b": int(e["child"]), "kind": "line"} for e in layout["edges"]]
@@ -243,8 +244,9 @@ CSS = """
 .node.focus rect, .node.focus circle { stroke: #FFFFFF; stroke-width: 3; }
 .node text { fill: #FFFFFF; font-size: 14px; text-anchor: middle; pointer-events: none;
              paint-order: stroke; stroke: #0E0E0E; stroke-width: 4px; }
-.hud { position: absolute; top: 0; left: 0; max-width: 50%; pointer-events: none;
-       text-shadow: 0 0 3px #0A0A0A, 0 0 6px #0A0A0A; }
+.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+        margin-bottom: 10px; }
+.hud { flex: 1 1 auto; min-width: 0; pointer-events: none; }
 .hud .t { font-size: 22px; font-weight: 600; line-height: 1.2; }
 .hud .d { font-size: 14px; color: #ADADAD; margin-top: 3px; line-height: 1.35; }
 .bar button, .modes button { background: #0A0A0A; color: #FFFFFF;
@@ -252,13 +254,14 @@ CSS = """
               font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
 .bar button:hover, .modes button:hover { border-color: #FFFFFF; }
 .bar button:focus-visible, .modes button:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
-.modes { position: absolute; top: 0; right: 0; display: flex; gap: 0; }
+.modes { flex: none; display: flex; gap: 0; }
 .modes button { border-radius: 0; margin-left: -1.5px; }
 .modes button:first-child { border-radius: 10px 0 0 10px; }
 .modes button:last-child { border-radius: 0 10px 10px 0; }
 .modes button.on { background: #FFFFFF; color: #0A0A0A; border-color: #FFFFFF; }
-.bar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; margin-top: 6px; }
-.hint { flex: 1 1 240px; min-height: 5.4em; font-size: 13.5px; line-height: 1.35; color: #9A9A9A; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin: 22px 0 10px; }
+.hint { flex: 1 1 240px; min-height: 2.7em; margin-left: 6px; font-size: 13.5px; line-height: 1.35; color: #9A9A9A;
+        display: flex; align-items: center; }
 .tipd { position: absolute; pointer-events: none; opacity: 0; z-index: 3;
         background: rgba(22,22,22,.97); border: 1px solid #6E6E6E; border-radius: 9px;
         padding: 6px 10px; font-size: 13.5px; transition: opacity .12s ease; }
@@ -415,15 +418,20 @@ function build(host, data) {
   });
   const gEdges = el("g", {}, svg), gDots = el("g", {}, svg), gNodes = el("g", {}, svg);
 
+  const top = document.createElement("div");
+  top.className = "top";
+  wrap.insertBefore(top, svg);
   const hud = document.createElement("div");
   hud.className = "hud";
   hud.innerHTML = '<div class="t"></div><div class="d"></div>';
-  wrap.appendChild(hud);
+  hud.style.position = "static";  // in the row above the disk, never over it
+  top.appendChild(hud);
   const modes = document.createElement("div");
   modes.className = "modes";
   modes.innerHTML = '<button type="button" data-mode="hyp" class="on">Hyperbolic</button>' +
                     '<button type="button" data-mode="flat">Flat</button>';
-  wrap.appendChild(modes);
+  modes.style.position = "static";
+  top.appendChild(modes);
   const bar = document.createElement("div");
   bar.className = "bar";
   bar.innerHTML = '<button type="button" class="go-bus"></button>' +
@@ -777,7 +785,8 @@ export default function (component) {
 }
 """
 
-_disk = st.components.v2.component("headroom_disk", css=CSS, js=JS)
+# The version in the name makes browsers load this code fresh instead of a cached older copy.
+_disk = st.components.v2.component("headroom_disk_v4", css=CSS, js=JS)
 
 
 def show_disk(data, key="disk"):

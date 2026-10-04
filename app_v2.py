@@ -7,7 +7,9 @@ nothing here changes them.
 import base64
 import json
 import re
+import struct
 import time
+import zlib
 
 import numpy as np
 import pandas as pd
@@ -21,6 +23,7 @@ from capacity_data import CAPACITY95_FILE, CAPACITY_FILE, read_capacity, read_ca
 from control_room import (GREEN, ORANGE, RED, SUN, board_layout, capacity_board, explore_board,
                           flows_outward, path_lines, show_board, substation_of)
 from peak_shaving import CHECK_FILE as RULE_CHECK_FILE, OUT_FILE as RULE_FILE
+from clear_sky import CHECK_FILE as CLEAR_CHECK_FILE, OUT_FILE as CLEAR_FILE
 from capacity import MAX_SEARCH_MW
 from engine import (MAX_LOADING_PERCENT, MAX_VOLTAGE_PU, add_project, check,
                     farthest_bus, load_grid, solve)
@@ -144,10 +147,11 @@ def far_bus():
 
 
 @st.cache_data
-def capacities(firm_changed, flex_changed, rule_changed):
+def capacities(firm_changed, flex_changed, rule_changed, clear_changed):
     """Firm (worst case, results/capacity.csv), flexible (95% of
     conditions, results/capacity95.csv) and, if peak_shaving.py has run,
-    3% rule (results/peak_shaving.csv) capacity per bus, in one table."""
+    3% rule (results/peak_shaving.csv) capacity per bus, in one table.
+    If clear_sky.py has run, also the 3% rule in a cloudless year."""
     firm = read_capacity()
     flex = read_capacity95()
     table = pd.DataFrame({
@@ -162,6 +166,9 @@ def capacities(firm_changed, flex_changed, rule_changed):
         table["rule_share"] = rule.curtailed_share.fillna(0)
         table["rule_hours"] = rule.curtailed_hours.fillna(0).astype(int)
         table["rule_gain"] = rule.gain_mwh.fillna(0)
+        if CLEAR_FILE.exists():
+            clear = pd.read_csv(CLEAR_FILE).set_index("bus").reindex(firm.index)
+            table["clear"] = np.maximum(clear.rule_mw.fillna(0), firm.capacity_mw)
     return table
 
 
@@ -187,6 +194,19 @@ def sunlight_year(bus, mw, sunlight_file_time):
     """A year of real 2024 sunlight at `bus` with `mw` of solar (sunlight.py)."""
     models, features = model_and_features()
     return sunlight.year_check(bus, mw, models, features)
+
+
+@st.cache_data
+def sky_grid(sunlight_file_time):
+    """2024's satellite sunlight in W/m² as [hour of day, day of year], in local
+    standard time (UTC+1, no daylight saving), so noon stays mid-chart all year."""
+    table = pd.read_csv(sunlight.SUNLIGHT_FILE, parse_dates=["time_utc"])
+    local = table.time_utc + pd.Timedelta(hours=1)
+    keep = (local.dt.year == 2024).to_numpy()
+    grid = np.zeros((24, 366))
+    grid[local.dt.hour.to_numpy()[keep], local.dt.dayofyear.to_numpy()[keep] - 1] = (
+        table.irradiance_w_m2.fillna(0).to_numpy()[keep])
+    return grid
 
 
 # ---------------------------------------------------------------- look
@@ -215,7 +235,7 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-head svg { flex: none; }
 .hr-name { font-size: 1.85rem; font-weight: 600; line-height: 1; color: var(--ink); }
 .hr-line { font-size: .98rem; color: var(--ink3); margin-top: 5px; }
-.hr-story { font-size: 1.55rem; line-height: 1.3; color: #FFFFFF; max-width: 34em; margin-bottom: .45rem; }
+.hr-story { font-size: 1.55rem; line-height: 1.3; color: #FFFFFF; max-width: 34em; margin-bottom: 1.2rem; }
 .hr-where { color: var(--ink2); font-size: .93rem; line-height: 1.45; margin-top: -.35rem; }
 .hr-where b { color: var(--ink); font-weight: 600; }
 .hr-note { color: var(--ink3); font-size: .85rem; line-height: 1.4; margin-top: -.45rem; }
@@ -228,13 +248,18 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-lamps .n span { color: var(--ink3); font-size: .85rem; margin-left: 6px; }
 .hr-lamps .v { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
 .hr-lamps .v span { color: var(--ink3); font-weight: 400; font-size: .85rem; margin-left: 6px; }
-.hr-gauge { margin-top: -.45rem; }
-.hr-gauge .wrap { position: relative; }
+/* The capacity bar sits right under the slider, on exactly the same scale: the slider's track
+   is inset 6px at each end, and its own min/max labels are replaced by the bar's. */
+.st-key-mw [data-testid="stSliderTickBar"] { display: none; }
+.hr-gauge { margin-top: -1.2rem; }
+.hr-gauge .wrap { position: relative; margin: 0 6px; }
+.hr-gauge .scale { display: flex; justify-content: space-between; margin: 6px 6px 0;
+                   font-size: .8rem; color: var(--ink3); font-variant-numeric: tabular-nums; }
 .hr-gauge .track { position: relative; height: 8px; border-radius: 4px; background: #2C2C2C; overflow: hidden; }
 .hr-gauge .track i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; }
 .hr-gauge .mark { position: absolute; top: -4px; width: 3px; height: 16px; border-radius: 2px;
                   background: #FFFFFF; transform: translateX(-1px); }
-.hr-gauge .keys { display: flex; gap: 14px; margin-top: 7px; font-size: .84rem; color: var(--ink3); flex-wrap: wrap; }
+.hr-gauge .keys { display: flex; gap: 6px 14px; margin: 8px 6px 0; font-size: .84rem; color: var(--ink3); flex-wrap: wrap; }
 .hr-gauge .keys i { display: inline-block; width: 9px; height: 9px; border-radius: 2.5px; margin-right: 6px; }
 .hr-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .hr-count { padding: 13px 16px; border-radius: 12px; border: 1px solid var(--edge); background: var(--panel); }
@@ -267,9 +292,40 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-copy { color: var(--ink2); font-size: .98rem; line-height: 1.55; max-width: 62ch; }
 .hr-h { font-size: 1.2rem; font-weight: 600; color: var(--ink); margin-top: .6rem; }
 .hr-warn { border: 1px solid rgba(242,163,36,.5); border-radius: 12px; padding: 10px 14px; color: #F5C978; font-size: .92rem; }
-.hr-intro { color: var(--ink2); font-size: 1rem; line-height: 1.45; max-width: 80ch; padding-top: .35rem; }
+/* Streamlit pulls each HTML block up by 1rem; these blocks give that back so gaps stay even. */
+.hr-after { margin: .2rem 0 1rem; }
+.hr-after .hr-verdict + .hr-where { margin-top: .35rem; }
+.hr-after .hr-where + .hr-note { margin-top: .3rem; }
+.hr-after .hr-note + .hr-verdict { margin-top: .55rem; }
+.hr-after > .hr-note:first-child { margin-top: 0; }
+.hr-lamps, .hr-counts, .hr-tiles, .hr-copy, .hr-race { margin-bottom: 1rem; }
+.st-key-proof_left, .st-key-space_text { max-width: 700px; }
+.st-key-proof_left .hr-copy, .st-key-space_text .hr-copy { max-width: none; }
+.hr-plot { width: fit-content; max-width: 100%; }
+.hr-plot img { width: auto; max-width: 100%; max-height: max(420px, calc(100vh - 330px)); }
+.hr-last { margin-bottom: 1rem; }
+.st-key-controls { border-top: 1px solid #2A2A2A; padding-top: 1rem; margin-top: .3rem; }
+.st-key-sun_check button { border: 1.5px solid #A0A0A0; border-radius: 12px; background: transparent;
+                           padding: .4rem 1.1rem; min-height: 0; }
+.st-key-sun_check button:hover { border-color: #FFFFFF; background: #1A1A1A; }
+.hr-head { margin-bottom: .85rem; }
+.hr-intro { color: var(--ink2); font-size: 1rem; line-height: 1.45; max-width: 80ch; padding-top: .35rem;
+            margin-bottom: 1.2rem; }
 .hr-verdict { color: var(--ink); font-size: 1.12rem; font-weight: 600; line-height: 1.35; max-width: 40em; }
 [data-testid="stPopoverBody"] { max-width: 560px; }
+.hr-sky { margin: .6rem 0 1rem; }
+.hr-sky .plot { position: relative; padding-left: 2.9rem; }
+.hr-sky .plot img { display: block; width: 100%; height: 132px; max-width: none; object-fit: fill;
+                    image-rendering: pixelated; border-radius: 3px; }
+.hr-sky .hours span { position: absolute; left: 0; transform: translateY(-50%); font-size: .74rem;
+                      color: var(--ink3); }
+.hr-sky .months { display: grid; margin: .3rem 0 0 2.9rem; font-size: .74rem; color: var(--ink3); }
+.hr-sky .keys { display: flex; flex-wrap: wrap; gap: .35rem 1.3rem; margin: .55rem 0 0 2.9rem;
+                font-size: .82rem; color: var(--ink2); }
+.hr-sky .key { display: inline-flex; align-items: center; gap: .45rem; }
+.hr-sky .key i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+.hr-sky .key i.ramp { width: 64px; height: 10px; }
+.hr-sky .hr-note { margin: .45rem 0 0 2.9rem; }
 </style>
 """
 
@@ -296,6 +352,59 @@ def html(markup):
     st.markdown(clean(markup), unsafe_allow_html=True)
 
 
+# Sunlight colours, from night through cloud and haze to full sun.
+SKY_STOPS = ((0.0, (24, 24, 24)), (0.25, (78, 55, 18)), (0.55, (178, 122, 20)),
+             (0.8, (242, 194, 52)), (1.0, (255, 230, 140)))
+MONTHS = (("Jan", 31), ("Feb", 29), ("Mar", 31), ("Apr", 30), ("May", 31), ("Jun", 30),
+          ("Jul", 31), ("Aug", 31), ("Sep", 30), ("Oct", 31), ("Nov", 30), ("Dec", 31))
+
+
+def png_uri(rgb):
+    """An RGB array [rows, columns, 3] of uint8 as a PNG data URI, written
+    with the standard library only."""
+    rows, cols, _ = rgb.shape
+    raw = b"".join(b"\x00" + rgb[r].tobytes() for r in range(rows))
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", cols, rows, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    return "data:image/png;base64," + base64.b64encode(png).decode()
+
+
+def sky_chart(marked_utc=(), mark_label="", caption=""):
+    """Every hour of 2024 over the grid, coloured by NASA's satellite sunlight:
+    days across, hours down. The hours in `marked_utc` show in red."""
+    grid = sky_grid(file_time(sunlight.SUNLIGHT_FILE))
+    peak = float(grid.max())
+    share = np.clip(grid / peak, 0, 1)
+    stops = np.array([s for s, _ in SKY_STOPS])
+    colours = np.array([c for _, c in SKY_STOPS], dtype=float)
+    rgb = np.stack([np.interp(share, stops, colours[:, k]) for k in range(3)], axis=-1)
+    red = tuple(int(RED[i:i + 2], 16) for i in (1, 3, 5))
+    for t in marked_utc:
+        local = pd.Timestamp(t) + pd.Timedelta(hours=1)
+        if local.year == 2024:
+            rgb[local.hour, local.dayofyear - 1] = red
+    uri = png_uri(np.round(rgb).astype(np.uint8))
+    ramp = ", ".join(f"rgb{c} {s:.0%}" for s, c in SKY_STOPS)
+    months = "".join(f"<span>{m}</span>" for m, _ in MONTHS)
+    widths = " ".join(f"{d}fr" for _, d in MONTHS)
+    hours = "".join(f'<span style="top:{(h + .5) / 24:.2%}">{label}</span>'
+                    for h, label in ((6, "6 am"), (12, "noon"), (18, "6 pm")))
+    mark = (f'<span class="key"><i style="background:{RED}"></i>{mark_label}</span>'
+            if mark_label else "")
+    return f"""<div class="hr-sky">
+<div class="plot"><div class="hours">{hours}</div><img src="{uri}"
+alt="Every hour of 2024 over the grid, coloured by the sunlight NASA's satellites measured"></div>
+<div class="months" style="grid-template-columns:{widths}">{months}</div>
+<div class="keys"><span class="key"><i class="ramp" style="background:linear-gradient(90deg, {ramp})"></i>
+sunlight, 0 to {peak:,.0f} W/m²</span>{mark}</div>
+<div class="hr-note">{caption}</div></div>"""
+
+
 def lamp_colour(value, warn_from, limit):
     if value is None or value > limit + 1e-9:
         return RED
@@ -313,8 +422,10 @@ board = layout()
 mv_buses = [int(b) for b in net0.bus.index[net0.bus.vn_kv == 20]]
 farthest = far_bus()
 where = substation_of(board)
-caps = capacities(file_time(CAPACITY_FILE), file_time(CAPACITY95_FILE), file_time(RULE_FILE))
+caps = capacities(file_time(CAPACITY_FILE), file_time(CAPACITY95_FILE), file_time(RULE_FILE),
+                  file_time(CLEAR_FILE))
 has_rule = "rule" in caps.columns
+has_clear = "clear" in caps.columns
 
 # Values that live across views. Streamlit forgets a widget's value on any
 # run where the widget isn't drawn, so copy them over every run.
@@ -381,8 +492,11 @@ def rule_line(bus):
         return f"{firm} That's the top of the search range, so the 3% rule can't add more."
     if row.rule <= row.firm + 1e-9:
         return f"{firm} The 3% rule adds nothing here."
-    return (f"{firm} Under the 3% rule: <b>{rule_size_text(row)}</b>, losing "
+    line = (f"{firm} Under the 3% rule: <b>{rule_size_text(row)}</b>, losing "
             f"<b>{row.rule_share:.1%}</b> of its energy.")
+    if has_clear and row.rule > row.clear + 0.05:
+        line += f" Without the clouds NASA's satellites saw, only <b>{row.clear:.1f} MW</b>."
+    return line
 
 
 def connection_verdict(bus, mw):
@@ -586,16 +700,20 @@ def try_a_project():
         with st.container(horizontal=True, gap="small"):
             st.button(label, key="toggle", on_click=toggle_solar)
             st.button("Play a sunny day", key="play_day", on_click=start_day)
+        # Everything under the buttons in one block, so the spacing stays even.
+        parts = []
         if day_text:
-            html('<div class="hr-note">Every hour is a full physics check. Demand follows an '
-                 'illustrative sunny-weekend pattern, low at midday and highest in the evening.</div>')
+            parts.append('<div class="hr-note">Every hour is a full physics check. Demand follows '
+                         'an illustrative sunny-weekend pattern, low at midday and highest in the '
+                         'evening.</div>')
         if bus in caps.index:
-            # One block, so the lines sit cleanly under each other.
-            numbers = (f'<div class="hr-where" style="margin-top:.3rem">{rule_line(bus)}</div>'
-                       f'<div class="hr-note" style="margin-top:.3rem">{RULE_NOTE} Worked out hour '
-                       'by hour over 2024 with NASA satellite sunlight, holding demand at its '
-                       'minimum.</div>') if has_rule else ""
-            html(f'<div><div class="hr-verdict">{connection_verdict(bus, mw)}</div>{numbers}</div>')
+            parts.append(f'<div class="hr-verdict">{connection_verdict(bus, mw)}</div>')
+            if has_rule:
+                parts.append(f'<div class="hr-where">{rule_line(bus)}</div>'
+                             f'<div class="hr-note">{RULE_NOTE} Worked out hour by hour over 2024 '
+                             'with NASA satellite sunlight, holding demand at its minimum.</div>')
+        if parts:
+            html(f'<div class="hr-after">{"".join(parts)}</div>')
     with lamp_col:
         if solved:
             vmax_bus = int(net.res_bus.vm_pu.idxmax())
@@ -623,19 +741,27 @@ def try_a_project():
             st.session_state.sun_request = (bus, mw)
         if st.session_state.get("sun_request") == (bus, mw):
             if not sunlight.SUNLIGHT_FILE.exists():
-                html('<div class="hr-note">No sunlight data yet: run '
+                html('<div class="hr-note hr-last">No sunlight data yet: run '
                      '<code>py -3.14 fetch_sunlight.py</code> once, with internet.</div>')
             elif mw == 0:
-                html('<div class="hr-note">Add some solar first.</div>')
+                html('<div class="hr-note hr-last">Add some solar first.</div>')
             else:
                 with st.spinner("Checking every daylight hour of 2024..."):
                     r = sunlight_year(bus, mw, file_time(sunlight.SUNLIGHT_FILE))
-                html(f'<div class="hr-where">With real 2024 sunlight (NASA satellite data), '
-                     f'<b>{mw:g} MW</b> at bus {bus} would need curtailing in '
-                     f'<b>{r["solver_fail_hours"]:,}</b> of {r["daylight_hours"]:,} daylight '
-                     f'hours, if demand stayed as low as the worst case.</div>')
+                n = r["solver_fail_hours"]
+                caption = ("Each column is a day of 2024 and each row an hour, coloured by the "
+                           "sunlight NASA's satellites measured over this grid. Dark streaks are "
+                           "cloudy days. "
+                           + ("Red marks the hours this project would need curtailing." if n else
+                              "No hour of 2024 would need curtailing at this size."))
+                html(f'<div class="hr-where">With real 2024 sunlight (NASA satellite '
+                     f'data), <b>{mw:g} MW</b> at bus {bus} would need curtailing in '
+                     f'<b>{n:,}</b> of {r["daylight_hours"]:,} daylight '
+                     f'hours, if demand stayed as low as the worst case.</div>'
+                     + sky_chart(r["fail_times_utc"], "needs curtailing" if n else "", caption))
 
-    c1, c2, c3 = st.columns([1, 1.2, 1.2], gap="large")
+    controls = st.container(key="controls")
+    c1, c2, c3 = controls.columns([1, 1.2, 1.2], gap="large")
     with c1:
         pick_bus()
         html(f'<div class="hr-where">{where_line(bus)}</div>')
@@ -655,6 +781,7 @@ def try_a_project():
             html(f"""<div class="hr-gauge"><div class="wrap"><div class="track">{bars}
 <i style="width:{min(row.firm / scale, 1) * 100:.1f}%;background:{GREEN}"></i>
 </div><div class="mark" style="left:{min(mw / scale, 1) * 100:.1f}%"></div></div>
+<div class="scale"><span>0 MW</span><span>{scale:g} MW</span></div>
 <div class="keys"><span><i style="background:{GREEN}"></i>Firm up to {row.firm:.1f} MW</span>
 <span><i style="background:{ORANGE}"></i>Flexible up to {row.flex:.1f} MW</span>{rule_key}</div></div>""")
     with c3:
@@ -708,17 +835,34 @@ def capacity_map():
 <div class="lbl">take it under the 3% rule, losing at most 3% of its yearly energy</div></div>
 <div class="hr-count"><div class="big">+{second_n - firm_n}</div>
 <div class="lbl">more points open up under the 3% rule, with no new wires</div></div></div>""")
+            sky = ""
+            if sunlight.SUNLIGHT_FILE.exists():
+                cloud = ""
+                if has_clear:
+                    clear_n = int((caps.clear >= size - 1e-9).sum())
+                    if second_n > clear_n:
+                        cloud = (f'<div class="hr-where" style="margin:.1rem 0 0"><b>The clouds '
+                                 f'matter.</b> In a cloudless year, the same rule would open only '
+                                 f'<b>+{clear_n - firm_n}</b> points at {size:g} MW, not '
+                                 f'+{second_n - firm_n}. Curtailment only bites in full sun, and '
+                                 f'the satellite data shows how rare full sun is.</div>')
+                sky = cloud + sky_chart(caption=(
+                    "The sunlight behind the 3% rule: every hour of 2024 over this grid, as NASA's "
+                    "satellites measured it (CERES data, via NASA POWER). Days run left to right, "
+                    "hours top to bottom, and dark streaks are cloudy days."))
             recheck = ""
             if check:
                 recheck = (f" Rechecked with the physics engine at {check['buses_checked']} points, "
                            f"{check['hours_checked']:,} hours: {check['buses_kept']} kept the AI's "
                            f"size, {check['buses_lowered']} came down by at most "
                            f"{check['most_lowered_mw']:g} MW.")
-            html(f"""<div class="hr-note" style="margin-top:.2rem">{RULE_NOTE} For every daylight
+            cloudless = (" The cloudless year runs the same rule, AI model and physics recheck on a "
+                         "clear-sky model (Haurwitz) instead of the satellite data." if has_clear else "")
+            html(f"""{sky}<div class="hr-note" style="margin-top:.2rem">{RULE_NOTE} For every daylight
 hour of 2024, from NASA satellite sunlight, the AI model finds how much each point can take, and
 anything above that is curtailed. Assumptions: demand held at its minimum (10% of peak) all year,
 the solar already on the grid follows the same sunlight and is never curtailed, hourly
-data.{recheck}</div>""")
+data.{recheck}{cloudless}</div>""")
             return
         html(f"""<div class="hr-counts">
 <div class="hr-count firm"><div class="big">{firm_n}<small>of {total}</small></div>
@@ -820,8 +964,8 @@ def proof():
         for big, lbl in tiles) + "</div>")
 
     left, right = st.columns([1, 1.05], gap="large")
-    with left:
-        html('<div class="hr-h">Why use AI at all</div>')
+    with left, st.container(key="proof_left"):
+        html('<div class="hr-h" style="margin-top:0">Why use AI at all</div>')
         html(f"""<div class="hr-copy">One capacity search takes about {SOLVES_PER_SEARCH} physics
 checks. A map that holds in 95% of conditions needs that search for every connection point under a
 thousand grid conditions. The AI does the same search in a fraction of the time, and the physics
@@ -867,7 +1011,7 @@ def electrical_space():
     left, right = st.columns([1.25, 1], gap="large")
     with left:
         show_disk(disk_data(net, board, disk(), states, bus, fit=(curved, flat)))
-    with right:
+    with right, st.container(key="space_text"):
         html('<div class="hr-h" style="margin-top:0">Electrical space</div>')
         html("""<div class="hr-copy">On a map, distance is measured in kilometres. To a grid, the
 distance that matters is electrical: the impedance of the lines between two points, in ohms. The
@@ -885,12 +1029,12 @@ space, three to a corner, which can't happen on a flat page.</div>""")
 <div class="lbl">average distance error in this hyperbolic drawing</div></div>
 <div class="hr-count"><div class="big">{flat:.0%}</div>
 <div class="lbl">in a flat drawing fitted to the same distances</div></div></div>""")
-        html(f"""<div class="hr-note" style="margin-top:.2rem">Measured over all {pairs:,} pairs of
+        html(f"""<div class="hr-note" style="margin:.2rem 0 1rem">Measured over all {pairs:,} pairs of
 buses against their true electrical distance. The flat drawing is metric multidimensional scaling
 (SMACOF), which moves points to match the distances as closely as it can. Switch to Flat to see
 it.</div>""")
         state_line = (f"{mw:g} MW of new solar at bus {bus}" if mw > 0 else "no new solar")
-        html(f'<div class="hr-where" style="margin-top:.4rem">Colours and moving dots show the same '
+        html(f'<div class="hr-where" style="margin:0 0 1rem">Colours and moving dots show the same '
              f'physics check as Try a project: {state_line}, {condition.lower()} conditions.</div>')
         label = f"Add {DEMO_MW:g} MW of solar at bus {bus}" if mw == 0 else "Remove the solar"
         st.button(label, key="toggle_space", on_click=toggle_solar)

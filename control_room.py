@@ -671,7 +671,8 @@ export default function (component) {
 }
 """
 
-_board = st.components.v2.component("headroom_board", css=CSS, js=JS)
+# The version in the name makes browsers load this code fresh instead of a cached older copy.
+_board = st.components.v2.component("headroom_board_v4", css=CSS, js=JS)
 
 
 def show_board(data, key="board"):
