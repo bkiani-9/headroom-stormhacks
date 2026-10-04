@@ -1,5 +1,6 @@
 import json
 
+import pandas as pd
 import streamlit as st
 
 import ml
@@ -7,10 +8,19 @@ from capacity import MAX_SEARCH_MW
 from capacity_data import (CAPACITY95_FILE, CAPACITY_FILE, HEADLINE_MW,
                            count_can_take, placeholder_capacity, read_capacity,
                            read_capacity95)
+from diagram import capacity_data, project_data, show_diagram, tree_layout
 from engine import add_project, check, farthest_bus, load_grid, solve
 from network_plot import capacity_figure, network_figure
 
 MAP_KEY = "grid_map"
+CORNER_FILE = ml.ROOT / "results" / "capacity_scenarios.csv"
+
+# Grid conditions for the Project check: (load level, existing generation
+# level), or None for today's grid as pandapower ships it (10% / 80%).
+CONDITIONS = {
+    "Today's grid": None,
+    "Heavy load, other generators off": (0.6, 0.0),
+}
 
 
 # Load and solve the grid once, then reuse it when the page reruns.
@@ -22,17 +32,50 @@ def solved_grid():
 
 
 @st.cache_resource
+def condition_grid(condition):
+    """The grid under a named condition, solved, without any new project."""
+    levels = CONDITIONS[condition]
+    if levels is None:
+        return solved_grid()
+    net = load_grid()
+    net.load["scaling"], net.sgen["scaling"] = levels
+    solve(net)
+    return net
+
+
+@st.cache_resource
 def far_bus():
     return farthest_bus(solved_grid())
 
 
-# Remember each (bus, size) already solved, so dragging back is instant.
+@st.cache_resource
+def diagram_layout():
+    return tree_layout(solved_grid())
+
+
+# Remember each (bus, size, condition) already solved, so dragging back is instant.
 @st.cache_resource(max_entries=300)
-def with_solar(bus, mw):
+def with_solar(bus, mw, condition="Today's grid"):
     """The grid with `mw` of solar at `bus`, solved, and its check result."""
-    project_net = add_project(solved_grid(), bus, mw)
+    project_net = add_project(condition_grid(condition), bus, mw)
     result = check(project_net)
     return project_net, result
+
+
+@st.cache_data
+def corner_capacities(last_changed):
+    """Solver capacities per bus at the four corner conditions."""
+    return pd.read_csv(CORNER_FILE)
+
+
+def condition_capacity(condition):
+    """Each bus's solver capacity (MW) under a named condition."""
+    if CONDITIONS[condition] is None:
+        return capacity_from_file(CAPACITY_FILE.stat().st_mtime).capacity_mw.to_dict()
+    load, gen = CONDITIONS[condition]
+    corners = corner_capacities(CORNER_FILE.stat().st_mtime)
+    match = corners[(corners.load_level == load) & (corners.gen_level == gen)]
+    return match.set_index("bus").capacity_mw.to_dict()
 
 
 # Read the capacity file once. The file's last-changed time is part of the
@@ -98,6 +141,10 @@ farthest = far_bus()
 # One selected bus for the whole page, stored under the dropdown's key.
 # A new click on the map changes it; so does picking from the dropdown.
 st.session_state.setdefault("bus", farthest)
+# A click in the diagram arrives on the previous run; apply it here, before
+# the dropdown is drawn.
+if "pending_bus" in st.session_state:
+    st.session_state.bus = st.session_state.pop("pending_bus")
 click = clicked_bus(st.session_state.get(MAP_KEY))
 if click is not None and click != st.session_state.get("last_click") and click in mv_buses:
     st.session_state.bus = click
@@ -107,9 +154,23 @@ selected = st.session_state.bus
 # Streamlit forgets a widget's value on any run where it isn't drawn. The
 # slider and before/after switch are only drawn in one view, so copy their
 # values over each run to keep them when switching views and back.
-for key in ["mw", "view", "cap_map"]:
+for key in ["mw", "view", "cap_map", "condition", "display", "cap_size"]:
     if key in st.session_state:
         st.session_state[key] = st.session_state[key]
+
+
+def pick_display(slot):
+    """The Map / Diagram switch."""
+    return slot.radio("Display", ["Map", "Diagram"], horizontal=True, key="display",
+                      label_visibility="collapsed")
+
+
+def draw_diagram(data):
+    """Show the diagram; a click on a bus selects it (applied on the next run)."""
+    clicked = show_diagram(data, key="diagram")
+    if clicked is not None and clicked != selected and clicked in mv_buses:
+        st.session_state.pending_bus = clicked
+        st.rerun()
 
 
 def bus_label(bus):
@@ -123,11 +184,13 @@ def show_project_view(switch_slot):
     """Add solar at the selected bus and see what it does to the grid."""
     with st.sidebar:
         st.header("New solar project")
+        condition = st.radio("Grid condition", list(CONDITIONS), key="condition")
         st.selectbox("Bus", mv_buses, key="bus", format_func=bus_label)
         mw = st.slider("Solar size (MW)", 0.0, 20.0, 0.0, 0.1, key="mw")
         mw = round(mw, 1)  # 0.1 steps can arrive as 2.3000000000000003
 
-    project_net, result = with_solar(selected, mw)
+    base_net = condition_grid(condition)
+    project_net, result = with_solar(selected, mw, condition)
     solved = result["max_voltage"] is not None
 
     with st.sidebar:
@@ -145,22 +208,27 @@ def show_project_view(switch_slot):
         horizontal=True, key="view", label_visibility="collapsed",
     )
     show_after = view.startswith("After")
+    display = pick_display(switch_slot)
 
     # Pick which grid to draw. If the grid with the project doesn't solve,
-    # there are no new results to draw, so the map falls back to today's grid.
+    # there are no new results to draw, so it falls back to the grid without it.
     if mw == 0:
-        st.subheader("Today's grid")
-        map_net = net
+        st.subheader(condition)
+        map_net = base_net
     elif not show_after:
         st.subheader(f"Before: without the {mw:g} MW")
-        map_net = net
+        map_net = base_net
     elif solved:
         st.subheader(f"After: {mw:g} MW of solar at bus {selected}")
         map_net = project_net
     else:
-        st.subheader("After: the grid does not solve (showing today's grid)")
-        map_net = net
+        st.subheader("After: the grid does not solve (showing it without the project)")
+        map_net = base_net
 
+    if display == "Diagram":
+        draw_diagram(project_data(map_net, diagram_layout(), mw,
+                                  condition_capacity(condition), selected))
+        return
     st.plotly_chart(
         network_figure(map_net, selected),
         key=MAP_KEY, on_select="rerun", selection_mode="points",
@@ -255,6 +323,19 @@ def show_capacity_view(saved, error, switch_slot):
                 st.caption("Placeholder data, not real.")
         else:
             st.markdown("No capacity data for this bus.")
+
+    # The Diagram needs the 95% results (firm) and the corner runs (best case).
+    can_diagram = saved95 is not None and CORNER_FILE.exists()
+    display = pick_display(switch_slot) if can_diagram else "Map"
+    if display == "Diagram":
+        with st.sidebar:
+            size = st.slider("Project size (MW)", 0.5, 20.0, HEADLINE_MW, 0.5, key="cap_size")
+        corners = corner_capacities(CORNER_FILE.stat().st_mtime)
+        best = corners.groupby("bus").capacity_mw.max().to_dict()
+        st.subheader(f"Who can take {size:g} MW: firm, flexible only, or can't")
+        draw_diagram(capacity_data(net, diagram_layout(), size,
+                                   saved95.capacity_mw.to_dict(), best, selected))
+        return
 
     if in_95:
         st.subheader("Solar each bus can take in 95% of grid conditions")

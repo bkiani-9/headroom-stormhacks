@@ -25,6 +25,16 @@ grid, which is close to the worst case for voltage, 175 of 177 can.
   - **In 95% of grid conditions:** the size that fits in at least 95% of
     sampled load and generation conditions, checked with the real power
     flow.
+- **Map or Diagram:** each view can switch from the map to a schematic
+  single-line diagram (a custom component, inline HTML/CSS/JS, offline):
+  substations as tiles, branches as a tidy tree, particles moving along
+  each line in the real direction of power flow, lines coloured by
+  loading, a gauge on each bus showing how much of its capacity the
+  project uses. In the Capacity view it colours buses firm, flexible
+  only or can't at a chosen size (2 MW to start).
+- **Grid condition:** the Project check runs on today's grid or under
+  heavy load with the other generators off, where adding solar at the far
+  end visibly reverses the flow on its feeder.
 - **Proof:** how well the machine-learning model matches the solver: the
   test error in one sentence and a model-versus-solver plot, with the full
   error report underneath.
