@@ -1,39 +1,73 @@
 {
-  "train_scenarios": 32000,
-  "test_scenarios": 8000,
+  "train_scenarios": 48000,
+  "test_scenarios": 12000,
+  "training_files": [
+    "scenarios.csv",
+    "scenarios_boundary.csv",
+    "scenarios_edges.csv"
+  ],
   "errors": {
     "max_voltage_pu": {
-      "mean_abs_error": 0.0009129655805615573,
-      "p95_abs_error": 0.0025335099163459524,
-      "max_abs_error": 0.016976854187517265
+      "mean_abs_error": 0.0009430839382397806,
+      "p95_abs_error": 0.002629172283085799,
+      "max_abs_error": 0.011459472257213
     },
     "max_line_loading": {
-      "mean_abs_error": 1.0306596623751998,
-      "p95_abs_error": 3.050152724015659,
-      "max_abs_error": 13.467028983336945
+      "mean_abs_error": 0.9380789731737765,
+      "p95_abs_error": 2.7333488963466337,
+      "max_abs_error": 20.011119959735368
     },
     "max_trafo_loading": {
-      "mean_abs_error": 0.859639367945193,
-      "p95_abs_error": 2.2434365872610242,
-      "max_abs_error": 10.45321291727376
+      "mean_abs_error": 0.8201579105145513,
+      "p95_abs_error": 2.179069132337855,
+      "max_abs_error": 10.389586011215856
     }
   },
+  "near_limit_errors": {
+    "max_voltage_pu": {
+      "cases": 4740,
+      "mean_abs_error": 0.0007692616570759969,
+      "p95_abs_error": 0.002036457882633891,
+      "max_abs_error": 0.005388923476934204,
+      "mean_signed_error": -0.00011365888513610096
+    },
+    "max_line_loading": {
+      "cases": 3684,
+      "mean_abs_error": 0.7338530090002708,
+      "p95_abs_error": 1.8926705944914402,
+      "max_abs_error": 4.1644654431055415,
+      "mean_signed_error": -0.06320530193919918
+    },
+    "max_trafo_loading": {
+      "cases": 28,
+      "mean_abs_error": 0.7185033303327479,
+      "p95_abs_error": 1.9811953669558977,
+      "max_abs_error": 2.7531157524557273,
+      "mean_signed_error": -0.12747121053731394
+    }
+  },
+  "pass_fail_near_limit": {
+    "accuracy": 0.966132658797077,
+    "false_pass_rate": 0.016863406408094434,
+    "false_fail_rate": 0.017003934794828555,
+    "cases": 7116
+  },
   "pass_fail_model": {
-    "accuracy": 0.980625,
+    "accuracy": 0.9799166666666667,
     "false_pass_rate": 0.01,
-    "false_fail_rate": 0.009375
+    "false_fail_rate": 0.010083333333333333
   },
   "pass_fail_baseline": {
-    "accuracy": 0.641375,
-    "false_pass_rate": 0.000125,
-    "false_fail_rate": 0.3585
+    "accuracy": 0.59325,
+    "false_pass_rate": 0.0,
+    "false_fail_rate": 0.40675
   },
   "capacity": {
     "cases": 708,
     "conditions": 4,
-    "mean_abs_error_mw": 0.28262711864406775,
-    "max_abs_error_mw": 2.1999999999999993,
-    "share_within_0_5_mw": 0.8531073446327684,
-    "share_over_by_more_than_0_5_mw": 0.05508474576271186
+    "mean_abs_error_mw": 0.1757062146892655,
+    "max_abs_error_mw": 1.799999999999999,
+    "share_within_0_5_mw": 0.961864406779661,
+    "share_over_by_more_than_0_5_mw": 0.00847457627118644
   }
 }

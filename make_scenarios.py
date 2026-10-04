@@ -43,6 +43,9 @@ BOUNDARY_SEED = 8
 EDGE_SEED = 9
 BOUNDARY_SPREAD_MW = 2.0
 CHUNK = 250  # scenarios per job handed to a worker
+# Worker processes. Each holds its own copy of the grid, so 8 ran the
+# laptop out of memory; 4 is safe. Change with --workers N.
+DEFAULT_WORKERS = 4
 
 # Each worker process loads the grid once and reuses it.
 _net = None
@@ -114,7 +117,10 @@ def main():
         out_file, inputs = SCENARIO_FILE, make_inputs()
     inputs = inputs.to_dict("records")
     chunks = [inputs[i:i + CHUNK] for i in range(0, len(inputs), CHUNK)]
-    workers = os.cpu_count()
+    workers = DEFAULT_WORKERS
+    if "--workers" in sys.argv:
+        workers = int(sys.argv[sys.argv.index("--workers") + 1])
+    workers = min(workers, os.cpu_count())
     print(f"{len(inputs)} scenarios on {workers} processes.")
 
     rows = []

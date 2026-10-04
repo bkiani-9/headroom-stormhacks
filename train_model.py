@@ -5,7 +5,7 @@ Run it from the project folder (after make_scenarios.py and build_features.py):
     py -3.14 train_model.py
 
 Writes:
-  models/headroom_model.joblib   the trained model
+  results/headroom_model.joblib  the trained models (not in git: 6 MB)
   results/model_report.md        the error report
   results/model_metrics.json     the same numbers, for the app
   results/model_vs_solver.png    model-versus-solver plot
@@ -33,6 +33,13 @@ REPORT_FILE = ROOT / "results" / "model_report.md"
 METRICS_FILE = ROOT / "results" / "model_metrics.json"
 PLOT_FILE = ROOT / "results" / "model_vs_solver.png"
 GOOD_MW = 0.5  # a capacity prediction within 0.5 MW is good (PLAN.md)
+
+# "Close to a limit": solver values in these bands around each limit.
+NEAR_LIMIT = {
+    "max_voltage_pu": (MAX_VOLTAGE_PU - 0.01, MAX_VOLTAGE_PU + 0.01),
+    "max_line_loading": (MAX_LOADING_PERCENT - 10, MAX_LOADING_PERCENT + 10),
+    "max_trafo_loading": (MAX_LOADING_PERCENT - 10, MAX_LOADING_PERCENT + 10),
+}
 
 # Chart colours (one series, so one hue; references stay muted grey).
 DOT = "#2a78d6"
@@ -87,6 +94,24 @@ def main():
     truth = s_test.passes.astype(bool).to_numpy()
     model_pass = ml.passes(predicted).to_numpy()
 
+    # Close to a limit: where a small error can flip pass and fail.
+    near_errors = {}
+    near_any = np.zeros(len(y_test), dtype=bool)
+    for target, (low, high) in NEAR_LIMIT.items():
+        near = ((y_test[target] >= low) & (y_test[target] <= high)).to_numpy()
+        near_any |= near
+        signed = (predicted[target] - y_test[target])[near]
+        near_errors[target] = {
+            "cases": int(near.sum()),
+            "mean_abs_error": float(signed.abs().mean()) if near.any() else None,
+            "p95_abs_error": float(signed.abs().quantile(0.95)) if near.any() else None,
+            "max_abs_error": float(signed.abs().max()) if near.any() else None,
+            # Negative: the model guesses too low, i.e. too optimistic.
+            "mean_signed_error": float(signed.mean()) if near.any() else None,
+        }
+    near_pass_fail = pass_fail_stats(truth[near_any], model_pass[near_any])
+    near_pass_fail["cases"] = int(near_any.sum())
+
     # Baseline: "it fits if it's no bigger than today's capacity at that bus".
     snapshot = pd.read_csv(SNAPSHOT_FILE, index_col="bus").capacity_mw
     baseline_pass = (s_test.solar_mw <= s_test.bus.map(snapshot)).to_numpy()
@@ -107,7 +132,10 @@ def main():
     metrics = {
         "train_scenarios": int(len(x_train)),
         "test_scenarios": int(len(x_test)),
+        "training_files": [f.name for f in files],
         "errors": errors,
+        "near_limit_errors": near_errors,
+        "pass_fail_near_limit": near_pass_fail,
         "pass_fail_model": pass_fail_stats(truth, model_pass),
         "pass_fail_baseline": pass_fail_stats(truth, baseline_pass),
         "capacity": capacity_stats,
@@ -118,12 +146,21 @@ def main():
     METRICS_FILE.write_text(json.dumps(metrics, indent=2))
     write_report(metrics)
     plot(y_test, predicted, cap_truth.capacity_mw, cap_model)
-    print(REPORT_FILE.read_text())
+    print(REPORT_FILE.read_text(encoding="utf-8"))
 
 
 def joblib_dump(models):
     import joblib
     joblib.dump(models, ml.MODEL_FILE)
+
+
+def near_row(label, n, unit, digits):
+    if not n["cases"]:
+        return f"| {label} | 0 | no cases this close to the limit | | | |"
+    fmt = f"{{:.{digits}f}}{unit}"
+    signed = f"{n['mean_signed_error']:+.{digits}f}{unit}"
+    return (f"| {label} | {n['cases']:,} | {fmt.format(n['mean_abs_error'])} "
+            f"| {fmt.format(n['p95_abs_error'])} | {fmt.format(n['max_abs_error'])} | {signed} |")
 
 
 def write_report(m):
@@ -132,8 +169,9 @@ def write_report(m):
     lines = [
         "# Headroom ML model: error report",
         "",
-        f"Trained on {m['train_scenarios']:,} solved scenarios; "
-        f"tested on {m['test_scenarios']:,} scenarios it never saw.",
+        f"Trained on {m['train_scenarios']:,} solved scenarios (80%); "
+        f"tested on {m['test_scenarios']:,} scenarios it never saw (20%). "
+        f"Data: {', '.join(m['training_files'])}.",
         "",
         "## Predicting the solver's numbers (held-out scenarios)",
         "",
@@ -146,7 +184,27 @@ def write_report(m):
         f"| Busiest transformer loading | {e['max_trafo_loading']['mean_abs_error']:.2f}% "
         f"| {e['max_trafo_loading']['p95_abs_error']:.2f}% | {e['max_trafo_loading']['max_abs_error']:.2f}% |",
         "",
-        "## Pass or fail (held-out scenarios)",
+        "## Close to a limit (held-out scenarios)",
+        "",
+        "Cases where the solver's value is near a limit (voltage within 0.01 pu "
+        "of 1.04; loading within 10 points of 100%), where a small error can "
+        "flip pass and fail. Average bias: negative means the model guesses "
+        "too low (too optimistic).",
+        "",
+        "| Quantity | Cases | Average error | 95% of errors below | Worst error | Average bias |",
+        "|---|---|---|---|---|---|",
+        *[near_row(label, m["near_limit_errors"][key], unit, digits)
+          for label, key, unit, digits in [
+              ("Highest voltage", "max_voltage_pu", " pu", 4),
+              ("Busiest line loading", "max_line_loading", "%", 2),
+              ("Busiest transformer loading", "max_trafo_loading", "%", 2)]],
+        "",
+        f"Pass or fail on the {m['pass_fail_near_limit']['cases']:,} scenarios close "
+        f"to any limit: agrees with the solver {m['pass_fail_near_limit']['accuracy']:.1%}; "
+        f"says pass when the solver fails {m['pass_fail_near_limit']['false_pass_rate']:.1%}; "
+        f"says fail when the solver passes {m['pass_fail_near_limit']['false_fail_rate']:.1%}.",
+        "",
+        "## Pass or fail (all held-out scenarios)",
         "",
         "| | Agrees with solver | Says pass, solver fails (dangerous) | Says fail, solver passes |",
         "|---|---|---|---|",
@@ -181,6 +239,10 @@ def plot(y_test, predicted, cap_true, cap_model):
         ax.plot([low, high], [low, high], color=REFERENCE, linewidth=1,
                 linestyle="--", zorder=1, label="perfect prediction")
         if limit is not None:
+            # Shade the "close to a limit" band the report breaks out.
+            band = 0.01 if limit == MAX_VOLTAGE_PU else 10
+            ax.axvspan(limit - band, limit + band, color="#f0efec", zorder=0,
+                       label="close to the limit")
             ax.axvline(limit, color=REFERENCE, linewidth=1, linestyle=":", zorder=1)
             ax.axhline(limit, color=REFERENCE, linewidth=1, linestyle=":", zorder=1,
                        label="limit")
@@ -194,7 +256,7 @@ def plot(y_test, predicted, cap_true, cap_model):
             ax.spines[side].set_visible(False)
         for side in ["left", "bottom"]:
             ax.spines[side].set_color("#c3c2b7")
-        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="lower right")
+        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="center left")
     fig.suptitle("Model versus solver (scenarios the model never saw)",
                  color="#0b0b0b", fontsize=13, x=0.02, ha="left")
     fig.tight_layout()

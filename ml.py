@@ -14,7 +14,7 @@ import pandas as pd
 from engine import MAX_LOADING_PERCENT, MAX_VOLTAGE_PU
 
 ROOT = Path(__file__).parent
-MODEL_FILE = ROOT / "models" / "headroom_model.joblib"
+MODEL_FILE = ROOT / "results" / "headroom_model.joblib"
 BUS_FEATURE_FILE = ROOT / "results" / "bus_features.csv"
 
 TARGETS = ["max_voltage_pu", "max_line_loading", "max_trafo_loading"]

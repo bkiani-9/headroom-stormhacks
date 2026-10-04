@@ -4,7 +4,7 @@ __pycache__/
 .pytest_cache/
 
 # Trained model: rebuilt in about a minute with `py -3.14 train_model.py`
-models/*.joblib
+results/*.joblib
 
 # Half-written files from interrupted runs
 results/*.tmp
