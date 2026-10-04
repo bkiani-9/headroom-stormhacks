@@ -10,6 +10,7 @@ import re
 import struct
 import time
 import zlib
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -23,7 +24,8 @@ from capacity_data import CAPACITY95_FILE, CAPACITY_FILE, read_capacity, read_ca
 from control_room import (GREEN, ORANGE, RED, SUN, board_layout, capacity_board, explore_board,
                           flows_outward, path_lines, show_board, substation_of)
 from peak_shaving import CHECK_FILE as RULE_CHECK_FILE, OUT_FILE as RULE_FILE
-from clear_sky import CHECK_FILE as CLEAR_CHECK_FILE, OUT_FILE as CLEAR_FILE
+import clear_sky
+from clear_sky import OUT_FILE as CLEAR_FILE
 from capacity import MAX_SEARCH_MW
 from engine import (MAX_LOADING_PERCENT, MAX_VOLTAGE_PU, add_project, check,
                     farthest_bus, load_grid, solve)
@@ -48,7 +50,7 @@ CONDITION_NOTES = {
     "Best case": "A dark, busy day: demand at 60% of its peak and no other solar. The most "
                  "room for new solar.",
 }
-VIEWS = ["Try a project", "Capacity map", "Electrical space", "Proof"]
+VIEWS = ["Try a project", "Capacity map", "From orbit", "Electrical space", "Proof"]
 LAYERS = ["Firm and flexible", "Firm and the 3% rule"]  # the Capacity map's two layers
 INTROS = {
     "Try a project": "Each box is a connection point on the grid, called a bus. Pick one, choose "
@@ -56,6 +58,8 @@ INTROS = {
     "Capacity map": "The same question for every connection point at once: can it take a project "
                     "of this size? Green means always, orange or yellow means with limits on its "
                     "output, red means no.",
+    "From orbit": "The sunlight behind the 3% rule comes from NASA's satellites. This is what they "
+                  "saw over the grid in 2024, and what the clouds change.",
     "Electrical space": "The same grid, drawn so that distance means electrical resistance, not "
                         "kilometres. The farther out a point sits, the less new solar it can take.",
     "Proof": "Can you trust the AI? Here it is tested against the physics engine on cases it "
@@ -209,6 +213,30 @@ def sky_grid(sunlight_file_time):
     return grid
 
 
+@st.cache_data
+def cloudless_grid():
+    """The same year with no clouds (clear_sky.py's Haurwitz model), laid out
+    like sky_grid()."""
+    lat, lon = clear_sky.grid_centre()
+    table = clear_sky.clear_sky_sunlight(lat, lon)
+    local = table.time_utc + pd.Timedelta(hours=1)
+    keep = (local.dt.year == 2024).to_numpy()
+    grid = np.zeros((24, 366))
+    grid[local.dt.hour.to_numpy()[keep], local.dt.dayofyear.to_numpy()[keep] - 1] = (
+        table.irradiance_w_m2.to_numpy()[keep])
+    return grid
+
+
+@st.cache_data
+def grid_place():
+    """(latitude, longitude) of the grid's centre, and of each 20 kV connection point."""
+    net = load_grid()
+    points = [tuple(json.loads(g)["coordinates"][::-1])
+              for g in net.bus.geo[net.bus.vn_kv == 20].dropna()]
+    lat, lon = clear_sky.grid_centre()
+    return lat, lon, tuple(points)
+
+
 # ---------------------------------------------------------------- look
 
 CSS = """
@@ -326,6 +354,16 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {
 .hr-sky .key i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
 .hr-sky .key i.ramp { width: 64px; height: 10px; }
 .hr-sky .hr-note { margin: .45rem 0 0 2.9rem; }
+.hr-sky.orbit { margin: .35rem 0 1.1rem; }
+.hr-sky.orbit .hr-note { max-width: 70ch; }
+.hr-globe svg { display: block; width: 100%; max-width: 300px; height: auto; margin: .3rem auto .4rem; }
+.hr-globe.cell svg { max-width: 300px; margin-top: .8rem; }
+.st-key-orbit_text { max-width: 560px; }
+.st-key-orbit_text .hr-copy { margin-bottom: .2rem; }
+.st-key-orbit_text .hr-note { margin-top: .6rem; }
+.hr-count.plain .big { color: var(--ink); }
+.st-key-view button { padding-left: .55rem; padding-right: .55rem; }
+.st-key-view button p { font-size: .9rem; white-space: nowrap; }
 </style>
 """
 
@@ -374,11 +412,11 @@ def png_uri(rgb):
     return "data:image/png;base64," + base64.b64encode(png).decode()
 
 
-def sky_chart(marked_utc=(), mark_label="", caption=""):
-    """Every hour of 2024 over the grid, coloured by NASA's satellite sunlight:
-    days across, hours down. The hours in `marked_utc` show in red."""
-    grid = sky_grid(file_time(sunlight.SUNLIGHT_FILE))
-    peak = float(grid.max())
+SKY_ALT = "Every hour of 2024 over the grid, coloured by the sunlight NASA's satellites measured"
+
+
+def sky_uri(grid, peak, marked_utc=()):
+    """A sunlight grid [hour, day] as a PNG data URI, the hours in `marked_utc` in red."""
     share = np.clip(grid / peak, 0, 1)
     stops = np.array([s for s, _ in SKY_STOPS])
     colours = np.array([c for _, c in SKY_STOPS], dtype=float)
@@ -388,21 +426,144 @@ def sky_chart(marked_utc=(), mark_label="", caption=""):
         local = pd.Timestamp(t) + pd.Timedelta(hours=1)
         if local.year == 2024:
             rgb[local.hour, local.dayofyear - 1] = red
-    uri = png_uri(np.round(rgb).astype(np.uint8))
-    ramp = ", ".join(f"rgb{c} {s:.0%}" for s, c in SKY_STOPS)
+    return png_uri(np.round(rgb).astype(np.uint8))
+
+
+def sky_axes(uri, height=132, alt=SKY_ALT):
+    """The chart image with its hour labels on the left and months underneath."""
     months = "".join(f"<span>{m}</span>" for m, _ in MONTHS)
     widths = " ".join(f"{d}fr" for _, d in MONTHS)
     hours = "".join(f'<span style="top:{(h + .5) / 24:.2%}">{label}</span>'
                     for h, label in ((6, "6 am"), (12, "noon"), (18, "6 pm")))
+    return (f'<div class="plot"><div class="hours">{hours}</div><img src="{uri}" alt="{alt}" '
+            f'style="height:{height}px"></div>'
+            f'<div class="months" style="grid-template-columns:{widths}">{months}</div>')
+
+
+def sky_keys(peak, mark_label=""):
+    """The colour key: the sunlight ramp, and the red hours if any."""
+    ramp = ", ".join(f"rgb{c} {s:.0%}" for s, c in SKY_STOPS)
     mark = (f'<span class="key"><i style="background:{RED}"></i>{mark_label}</span>'
             if mark_label else "")
-    return f"""<div class="hr-sky">
-<div class="plot"><div class="hours">{hours}</div><img src="{uri}"
-alt="Every hour of 2024 over the grid, coloured by the sunlight NASA's satellites measured"></div>
-<div class="months" style="grid-template-columns:{widths}">{months}</div>
-<div class="keys"><span class="key"><i class="ramp" style="background:linear-gradient(90deg, {ramp})"></i>
-sunlight, 0 to {peak:,.0f} W/m²</span>{mark}</div>
-<div class="hr-note">{caption}</div></div>"""
+    return (f'<div class="keys"><span class="key"><i class="ramp" style="background:'
+            f'linear-gradient(90deg, {ramp})"></i>sunlight, 0 to {peak:,.0f} W/m²</span>{mark}</div>')
+
+
+def sky_chart(marked_utc=(), mark_label="", caption=""):
+    """Every hour of 2024 over the grid, coloured by NASA's satellite sunlight:
+    days across, hours down. The hours in `marked_utc` show in red."""
+    grid = sky_grid(file_time(sunlight.SUNLIGHT_FILE))
+    peak = float(grid.max())
+    return (f'<div class="hr-sky">{sky_axes(sky_uri(grid, peak, marked_utc))}'
+            f'{sky_keys(peak, mark_label)}<div class="hr-note">{caption}</div></div>')
+
+
+# The globe faces Europe and Africa; Terra and Aqua fly sun-synchronous
+# polar orbits inclined 98.2 degrees.
+GLOBE_FACING = (38.0, 8.0)
+POLAR_INCLINATION = 98.2
+WORLD_FILE = Path(__file__).parent / "results" / "world_land.json"
+
+
+def orthographic(lat, lon, size, radius):
+    """Points (degrees) on a globe drawn `radius` px wide in a `size` px box.
+    Returns x, y and whether each point faces us; points on the far side are
+    moved to the globe's edge, so land shapes that cross it stay closed."""
+    lat0, lon0 = np.radians(GLOBE_FACING)
+    phi, lam = np.radians(np.asarray(lat, float)), np.radians(np.asarray(lon, float))
+    front = np.sin(lat0) * np.sin(phi) + np.cos(lat0) * np.cos(phi) * np.cos(lam - lon0) > 0
+    x = np.cos(phi) * np.sin(lam - lon0)
+    y = np.cos(lat0) * np.sin(phi) - np.sin(lat0) * np.cos(phi) * np.cos(lam - lon0)
+    norm = np.hypot(x, y)
+    norm[norm == 0] = 1
+    x, y = np.where(front, x, x / norm), np.where(front, y, y / norm)
+    return size / 2 + radius * x, size / 2 - radius * y, front
+
+
+def visible_runs(lat, lon, size, radius):
+    """SVG path data for the parts of a line that face us."""
+    x, y, front = orthographic(lat, lon, size, radius)
+    parts, run = [], []
+    for xi, yi, f in zip(x, y, front):
+        if f:
+            run.append(f"{xi:.1f},{yi:.1f}")
+        elif run:
+            parts.append(run)
+            run = []
+    if run:
+        parts.append(run)
+    return " ".join("M" + " L".join(r) for r in parts if len(r) > 1)
+
+
+@st.cache_data
+def globe_svg(world_changed, grid_lat, grid_lon):
+    """The Earth from space, with the grid's location and a polar orbit over it."""
+    size, radius = 300, 138
+    land = []
+    for ring in json.loads(WORLD_FILE.read_text())["rings"]:
+        ring = np.array(ring)
+        x, y, front = orthographic(ring[:, 1], ring[:, 0], size, radius)
+        if front.any():
+            land.append("M" + " L".join(f"{a:.1f},{b:.1f}" for a, b in zip(x, y)) + "Z")
+    steps = np.linspace(-180, 180, 181)
+    lines = [visible_runs(np.full_like(steps, la), steps, size, radius) for la in (-60, -30, 0, 30, 60)]
+    lines += [visible_runs(np.linspace(-90, 90, 91), np.full(91, lo), size, radius)
+              for lo in range(-180, 180, 30)]
+    # The polar orbit: the great circle through the grid with Terra's and Aqua's inclination.
+    phi, lam = np.radians(grid_lat), np.radians(grid_lon)
+    p = np.array([np.cos(phi) * np.cos(lam), np.cos(phi) * np.sin(lam), np.sin(phi)])
+    east = np.array([-np.sin(lam), np.cos(lam), 0.0])
+    north = np.array([-np.sin(phi) * np.cos(lam), -np.sin(phi) * np.sin(lam), np.cos(phi)])
+    heading = np.arcsin(np.cos(np.radians(POLAR_INCLINATION)) / np.cos(phi))
+    ahead = np.cos(heading) * north + np.sin(heading) * east
+    t = np.radians(np.arange(-180, 181, 1.0))
+    orbit = np.cos(t)[:, None] * p + np.sin(t)[:, None] * ahead
+    o_lat = np.degrees(np.arcsin(np.clip(orbit[:, 2], -1, 1)))
+    o_lon = np.degrees(np.arctan2(orbit[:, 1], orbit[:, 0]))
+    track = visible_runs(o_lat, o_lon, size, radius)
+    gx, gy, _ = orthographic([grid_lat], [grid_lon], size, radius)
+    k = int(np.argmin(np.abs(np.degrees(t) - 14)))  # the satellite, 14 degrees along its track
+    sx, sy, _ = orthographic([o_lat[k]], [o_lon[k]], size, radius)
+    sx, sy = sx[0], sy[0]
+    return f"""<svg viewBox="0 0 {size} {size}" role="img"
+aria-label="The Earth from space, with the grid's location in the Upper Rhine valley and a polar orbit passing over it">
+<defs><radialGradient id="hrSea" cx="42%" cy="38%" r="70%"><stop offset="0" stop-color="#16324A"/>
+<stop offset="1" stop-color="#0A1622"/></radialGradient></defs>
+<circle cx="{size / 2}" cy="{size / 2}" r="{radius}" fill="url(#hrSea)" stroke="#35506A" stroke-width="1"/>
+<path d="{' '.join(lines)}" fill="none" stroke="#1F3A52" stroke-width=".7"/>
+<path d="{' '.join(land)}" fill="#2E3B2F" stroke="#5E7462" stroke-width=".6" stroke-linejoin="round"/>
+<path d="{track}" fill="none" stroke="#9CC8F0" stroke-width="1.3" stroke-dasharray="4 3"/>
+<g transform="translate({sx:.1f},{sy:.1f})"><rect x="-3.5" y="-2.5" width="7" height="5" rx="1" fill="#E8EEF4"/>
+<rect x="-13" y="-1.6" width="8" height="3.2" fill="#6FA8DC"/><rect x="5" y="-1.6" width="8" height="3.2" fill="#6FA8DC"/></g>
+<circle cx="{gx[0]:.1f}" cy="{gy[0]:.1f}" r="7" fill="none" stroke="{SUN}" stroke-width="1.4" opacity=".7"/>
+<circle cx="{gx[0]:.1f}" cy="{gy[0]:.1f}" r="3" fill="{SUN}"/>
+</svg>"""
+
+
+@st.cache_data
+def cell_svg(grid_lat, grid_lon, bus_points):
+    """One NASA data cell (1 degree square, to scale) around the grid's 177 connection points."""
+    w, h = 300, 210
+    km_x = 111.32 * np.cos(np.radians(grid_lat))   # km per degree of longitude here
+    km_y = 110.57                                  # km per degree of latitude
+    scale = 170 / km_y                             # px per km: the cell is 170 px tall
+    cx, cy = w / 2, h / 2 - 4
+    half_w, half_h = 0.5 * km_x * scale, 0.5 * km_y * scale
+    dots = "".join(f'<circle cx="{cx + (lo - grid_lon) * km_x * scale:.1f}" '
+                   f'cy="{cy - (la - grid_lat) * km_y * scale:.1f}" r="1.1"/>'
+                   for la, lo in bus_points)
+    bar = 20 * scale
+    return f"""<svg viewBox="0 0 {w} {h}" role="img"
+aria-label="One NASA data cell, 1 degree by 1 degree, with the grid's connection points inside it">
+<rect x="{cx - half_w:.1f}" y="{cy - half_h:.1f}" width="{2 * half_w:.1f}" height="{2 * half_h:.1f}"
+fill="rgba(255,211,77,.07)" stroke="{SUN}" stroke-width="1.2"/>
+<g fill="#7EDB4C">{dots}</g>
+<text x="{cx + half_w + 8:.1f}" y="{cy - half_h + 12:.1f}" fill="#D2D2D2" font-size="13">1° × 1°</text>
+<text x="{cx + half_w + 8:.1f}" y="{cy - half_h + 29:.1f}" fill="#ADADAD" font-size="12">{km_y:.0f} × {km_x:.0f} km</text>
+<text x="{cx + 14:.1f}" y="{cy + 22:.1f}" fill="#7EDB4C" font-size="12">the grid</text>
+<line x1="{cx - half_w:.1f}" y1="{h - 8}" x2="{cx - half_w + bar:.1f}" y2="{h - 8}" stroke="#ADADAD" stroke-width="1.2"/>
+<text x="{cx - half_w + bar + 6:.1f}" y="{h - 5}" fill="#ADADAD" font-size="12">20 km</text>
+</svg>"""
 
 
 def lamp_colour(value, warn_from, limit):
@@ -651,7 +812,7 @@ def story(condition, bus, mw, before_net, after_net, result):
 
 
 # Header: name, one line on what it does, and the view switch.
-left, right = st.columns([1.5, 1], vertical_alignment="center")
+left, right = st.columns([1.15, 1], vertical_alignment="center")
 with left:
     html(f"""<div class="hr-head">{LOGO}<div>
 <div class="hr-name">Headroom</div>
@@ -1040,6 +1201,68 @@ it.</div>""")
         st.button(label, key="toggle_space", on_click=toggle_solar)
 
 
+def from_orbit():
+    if not sunlight.SUNLIGHT_FILE.exists():
+        html('<div class="hr-note">No sunlight data yet: run <code>py -3.14 fetch_sunlight.py</code> '
+             'once, with internet.</div>')
+        return
+    bus = int(st.session_state.bus)
+    mw = round(float(st.session_state.mw), 1)
+    real = sky_grid(file_time(sunlight.SUNLIGHT_FILE))
+    clear = cloudless_grid()
+    peak = float(max(real.max(), clear.max()))
+    marked, mark = (), ""
+    if mw > 0:
+        with st.spinner("Checking every daylight hour of 2024..."):
+            r = sunlight_year(bus, mw, file_time(sunlight.SUNLIGHT_FILE))
+        marked = r["fail_times_utc"]
+        if r["solver_fail_hours"]:
+            mark = f"the {r['solver_fail_hours']:,} hours {mw:g} MW at bus {bus} would need curtailing"
+    lat, lon, points = grid_place()
+
+    left, right = st.columns([1.55, 1], gap="large")
+    with left:
+        tiles = ""
+        if has_clear and bus in caps.index:
+            size = 5.0
+            firm_n = int((caps.firm >= size - 1e-9).sum())
+            rule_n = int((caps.rule >= size - 1e-9).sum())
+            clear_n = int((caps.clear >= size - 1e-9).sum())
+            row = caps.loc[bus]
+            share = real.sum() / clear.sum()
+            tiles = f"""<div class="hr-counts">
+<div class="hr-count rule"><div class="big">+{rule_n - firm_n}<small>vs +{clear_n - firm_n}</small></div>
+<div class="lbl">more connection points take {size:g} MW under the 3% rule with the real sky,
+against a cloudless year</div></div>
+<div class="hr-count plain"><div class="big">{row.rule:.1f}<small>vs {row.clear:.1f} MW</small></div>
+<div class="lbl">what bus {bus} can take under the 3% rule, real sky against cloudless</div></div>
+<div class="hr-count plain"><div class="big">{share:.0%}</div>
+<div class="lbl">of a cloudless year's sunlight reached the grid in 2024: {real.sum() / 1000:,.0f}
+of {clear.sum() / 1000:,.0f} kWh per m²</div></div></div>"""
+        html(f"""<div class="hr-h" style="margin-top:0">2024 over the grid, as NASA's satellites measured it</div>
+<div class="hr-sky orbit">{sky_axes(sky_uri(real, peak, marked), 150)}</div>
+<div class="hr-h">The same year with no clouds</div>
+<div class="hr-sky orbit">{sky_axes(sky_uri(clear, peak), 150,
+                         "Every hour of 2024 over the grid if there had been no clouds")}
+{sky_keys(peak, mark)}<div class="hr-note">Each column is a day and each row an hour (local
+standard time). The dark streaks in the real year are clouds passing over; the cloudless year is
+the Haurwitz clear-sky model. Curtailment only bites in full sun, so the clouds are what let the 3%
+rule open so many more connection points.</div></div>
+{tiles}""")
+    with right, st.container(key="orbit_text"):
+        html(f"""<div class="hr-h" style="margin-top:0">Where the data comes from</div>
+<div class="hr-globe">{globe_svg(file_time(WORLD_FILE), lat, lon)}</div>
+<div class="hr-copy">NASA's CERES instruments on the Terra and Aqua satellites measure the sunlight
+Earth reflects, and geostationary weather satellites track the clouds hour by hour. NASA turns both
+into hourly sunlight at the ground (CERES SYN1deg, through NASA POWER).</div>
+<div class="hr-globe cell">{cell_svg(lat, lon, points)}</div>
+<div class="hr-copy">NASA's data comes in cells of 1° × 1°, about 111 × 74 km here. All 177
+connection points sit inside one cell, so one series of sunlight covers the whole grid.</div>
+<div class="hr-note">The orbit is drawn for illustration: a polar orbit like Terra's and Aqua's,
+inclined 98°. The sunlight was downloaded once with requests, read with pandas and stored with the
+app, so it runs offline. Map: Natural Earth.</div>""")
+
+
 view = st.session_state.view
 intro_col, how_col = st.columns([2.4, 1], gap="large")
 with intro_col:
@@ -1051,6 +1274,8 @@ with how_col:
 
 if view == "Capacity map":
     capacity_map()
+elif view == "From orbit":
+    from_orbit()
 elif view == "Electrical space":
     electrical_space()
 elif view == "Proof":
