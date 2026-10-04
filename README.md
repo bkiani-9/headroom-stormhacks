@@ -111,6 +111,12 @@ py -3.14 -m streamlit run app.py   # opens http://localhost:8501
 - The app works offline: no map tiles, nothing loaded from the internet,
   and Streamlit's usage statistics are switched off
   (`.streamlit/config.toml`).
+- Demo safety: everything the demo shows is loaded when the app first
+  opens. The demo bus (147) has every slider value under both grid
+  conditions precomputed in `results/demo_cache.joblib`
+  (`py -3.14 precompute_demo.py`, 1 minute), so the demo never waits on
+  the solver; other buses are solved live. The **Reset demo** button in
+  the sidebar returns to bus 147, 0 MW, today's grid.
 
 Tests: `py -3.14 -m pytest` (9 tests).
 

@@ -5,6 +5,8 @@ __pycache__/
 
 # Trained model: rebuilt in about a minute with `py -3.14 train_model.py`
 results/*.joblib
+# ...except the demo's precomputed results (1 MB), which the demo needs.
+!results/demo_cache.joblib
 
 # Half-written files from interrupted runs
 results/*.tmp

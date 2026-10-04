@@ -1,5 +1,6 @@
 import json
 
+import joblib
 import pandas as pd
 import streamlit as st
 
@@ -14,6 +15,7 @@ from network_plot import capacity_figure, network_figure
 
 MAP_KEY = "grid_map"
 CORNER_FILE = ml.ROOT / "results" / "capacity_scenarios.csv"
+DEMO_FILE = ml.ROOT / "results" / "demo_cache.joblib"  # from precompute_demo.py
 
 # Grid conditions for the Project check: (load level, existing generation
 # level), or None for today's grid as pandapower ships it (10% / 80%).
@@ -53,13 +55,33 @@ def diagram_layout():
     return tree_layout(solved_grid())
 
 
+@st.cache_resource
+def demo_cache():
+    """Precomputed results for the demo bus at every slider value, or None."""
+    return joblib.load(DEMO_FILE) if DEMO_FILE.exists() else None
+
+
 # Remember each (bus, size, condition) already solved, so dragging back is instant.
 @st.cache_resource(max_entries=300)
 def with_solar(bus, mw, condition="Today's grid"):
-    """The grid with `mw` of solar at `bus`, solved, and its check result."""
+    """The grid with `mw` of solar at `bus`, solved, and its check result.
+
+    For the demo bus the results come from the precomputed file, so the
+    demo never waits on the solver; other buses are solved live.
+    """
     project_net = add_project(condition_grid(condition), bus, mw)
-    result = check(project_net)
-    return project_net, result
+    cache = demo_cache()
+    saved = cache["results"].get((condition, round(mw, 1))) if cache else None
+    if cache and bus == cache["bus"] and saved is not None:
+        if saved["vm_pu"] is not None:
+            # Fill in only what the maps read; the copy carries the rest of
+            # the base grid's results, which nothing here uses.
+            project_net.res_bus["vm_pu"] = saved["vm_pu"]
+            project_net.res_line["loading_percent"] = saved["line_loading"]
+            project_net.res_line["p_from_mw"] = saved["line_p_from_mw"]
+            project_net.res_trafo["loading_percent"] = saved["trafo_loading"]
+        return project_net, saved["result"]
+    return project_net, check(project_net)
 
 
 @st.cache_data
@@ -130,6 +152,27 @@ h1 { padding-top: 0; }
 </style>
 """, unsafe_allow_html=True)
 
+@st.cache_resource
+def warm_up():
+    """Load everything the demo shows, once, when the app first opens, so
+    nothing loads or solves mid-demo: both grid conditions, the precomputed
+    demo results, the capacity files and the diagram layout."""
+    for condition in CONDITIONS:
+        condition_grid(condition)
+    far_bus()
+    diagram_layout()
+    demo_cache()
+    for path, reader in [(CAPACITY_FILE, capacity_from_file),
+                         (CAPACITY95_FILE, capacity95_from_file),
+                         (CORNER_FILE, corner_capacities)]:
+        if path.exists():
+            reader(path.stat().st_mtime)
+    return True
+
+
+with st.spinner("Starting Headroom..."):
+    warm_up()
+
 st.title("Headroom")
 
 net = solved_grid()
@@ -154,9 +197,35 @@ selected = st.session_state.bus
 # Streamlit forgets a widget's value on any run where it isn't drawn. The
 # slider and before/after switch are only drawn in one view, so copy their
 # values over each run to keep them when switching views and back.
-for key in ["mw", "view", "cap_map", "condition", "display", "cap_size"]:
+for key in ["bus", "mw", "view", "cap_map", "condition", "display", "cap_size"]:
     if key in st.session_state:
         st.session_state[key] = st.session_state[key]
+
+
+# Where the demo starts. The Reset button puts every control back here.
+DEMO_START = {
+    "page": "Project check",
+    "condition": "Today's grid",
+    "mw": 0.0,
+    "view": "After: with the new solar",
+    "display": "Map",
+    "cap_map": "95% of conditions",
+    "cap_size": float(HEADLINE_MW),
+}
+
+
+def reset_demo():
+    """Back to the demo's starting bus and slider value (runs before the
+    page redraws, so it can set every control)."""
+    st.session_state.bus = farthest
+    for key, value in DEMO_START.items():
+        st.session_state[key] = value
+    st.session_state.pop("pending_bus", None)
+    # Ignore whatever was last clicked on the map.
+    st.session_state.last_click = clicked_bus(st.session_state.get(MAP_KEY))
+
+
+st.sidebar.button("Reset demo", on_click=reset_demo, width="stretch")
 
 
 def pick_display(slot):
