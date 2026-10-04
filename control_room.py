@@ -337,18 +337,33 @@ CSS = """
 .hit-line { fill: none; stroke: transparent; stroke-width: 14; cursor: help; }
 .bus { cursor: pointer; }
 .bus .tile { fill: var(--tile); stroke: var(--edge); stroke-width: 1.8;
-             transition: stroke .4s ease, fill .4s ease; transition-delay: calc(var(--d) * var(--lag)); }
+             transition: stroke .4s ease, fill .4s ease;
+             transition-delay: calc(var(--d) * var(--lag)); }
+.bus.idle .tile { stroke: #6FAE4C; }
+.bus.warn .tile { stroke: #FFA61A; }
 .bus .track { fill: #383838; pointer-events: none; }
 .bus .bar, .bus .bar2 { pointer-events: none; transition: width .45s ease, fill .45s ease;
                         transition-delay: calc(var(--d) * var(--lag)); }
 .bus:hover .tile { stroke: #FFFFFF; }
-.bus.sel .tile { stroke: #FFFFFF; stroke-width: 2.8; filter: drop-shadow(0 0 5px rgba(255,255,255,.5)); }
-.bus.over .tile { stroke: #FF4D57; stroke-width: 2.6; filter: drop-shadow(0 0 7px rgba(255,77,87,.8)); }
+.bus.sel .tile { stroke: #FFFFFF; stroke-width: 2.8; }
+.bus.over .tile { stroke: #FF4D57; stroke-width: 2.6; }
 .bus.firm .tile { stroke: #63C132; fill: #12230B; }
 .bus.flex .tile { stroke: #FFA61A; fill: #2E1E05; }
 .bus.rule .tile { stroke: #FFD34D; fill: #2A2306; }
 .bus.cant .tile { stroke: #FF4D57; fill: #33100F; }
 .bus.sel.firm .tile, .bus.sel.flex .tile, .bus.sel.rule .tile, .bus.sel.cant .tile { stroke-width: 3; }
+.bus.sel.idle .tile, .bus.sel.warn .tile, .bus.sel.firm .tile, .bus.sel.flex .tile, .bus.sel.rule .tile,
+.bus.sel.cant .tile { stroke: #FFFFFF; }
+.bus .halo, .bus .halo2 { fill: none; stroke: transparent; pointer-events: none; transition: stroke .4s ease; }
+.bus .halo { stroke-width: 3; opacity: .38; }
+.bus .halo2 { stroke-width: 6; opacity: .14; }
+.bus.idle .halo, .bus.idle .halo2, .bus.firm .halo, .bus.firm .halo2 { stroke: #63C132; }
+.bus.warn .halo, .bus.warn .halo2, .bus.flex .halo, .bus.flex .halo2 { stroke: #FFA61A; }
+.bus.rule .halo, .bus.rule .halo2 { stroke: #FFD34D; }
+.bus.over .halo, .bus.over .halo2, .bus.cant .halo, .bus.cant .halo2 { stroke: #FF4D57; }
+.bus.sel .halo, .bus.sel .halo2 { stroke: #FFFFFF; }
+.bus.sel.over .halo, .bus.sel.over .halo2 { stroke: #FF4D57; }
+.bus.sel .halo { opacity: .55; } .bus.sel .halo2 { opacity: .22; }
 .sub rect { fill: var(--tile); stroke: #A6A6A6; stroke-width: 1.8; }
 .sub.over rect { stroke: #FF4D57; }
 .sub .name { fill: #FFFFFF; font-size: 15px; font-weight: 600; text-anchor: middle; }
@@ -491,7 +506,9 @@ function build(host, data) {
     const g = el("g", { class: "bus", style: `--d:${b.col}` }, gBus);
     el("rect", { x: p.x - S / 2 - 6, y: p.y - S / 2 - 6, width: S + 12, height: S + 12,
                  fill: "transparent" }, g);
-    el("rect", { class: "tile", x: p.x - S / 2, y: p.y - S / 2, width: S, height: S, rx: 6 }, g);
+    el("rect", { class: "halo2", x: p.x - S / 2 - 3.5, y: p.y - S / 2 - 3.5, width: S + 7, height: S + 7, rx: 9.5 }, g);
+  el("rect", { class: "halo", x: p.x - S / 2 - 1.5, y: p.y - S / 2 - 1.5, width: S + 3, height: S + 3, rx: 7.5 }, g);
+  el("rect", { class: "tile", x: p.x - S / 2, y: p.y - S / 2, width: S, height: S, rx: 6 }, g);
     el("rect", { class: "track", x: p.x - BW / 2, y: p.y + S / 2 - 8.5, width: BW, height: 4, rx: 2 }, g);
     const bar2 = el("rect", { class: "bar2", x: p.x - BW / 2, y: p.y + S / 2 - 8.5, height: 4, rx: 2,
                               width: 0, fill: "#FFA61A" }, g);
@@ -672,7 +689,7 @@ export default function (component) {
 """
 
 # The version in the name makes browsers load this code fresh instead of a cached older copy.
-_board = st.components.v2.component("headroom_board_v5", css=CSS, js=JS)
+_board = st.components.v2.component("headroom_board_v7", css=CSS, js=JS)
 
 
 def show_board(data, key="board"):

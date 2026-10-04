@@ -94,17 +94,34 @@ The full report is in `results/model_report.md`, and the plot in
 
 ## Run it
 
-Tested on Windows with Python 3.14.7. In PowerShell, from this folder:
+Everything the apps need is in this repository: the code, every result
+file and the trained model. Nothing has to be computed first, and nothing
+is downloaded while the apps run. Tested with Python 3.14.7 on Windows.
 
-```powershell
-py -3.14 -m pip install pandapower==3.5.5 streamlit==1.64.0 plotly==7.1.0 scikit-learn==1.9.1 pandas==2.3.3 numpy==2.4.6 scipy==1.18.1 networkx==3.7 matplotlib==3.11.2 joblib==1.6.0 tqdm==4.70.1 pytest==9.1.1
-py -3.14 train_model.py            # rebuilds the model file (about 1 minute)
-py -3.14 -m streamlit run app.py   # opens http://localhost:8501
+**1. Get the code and the libraries** (once):
+
+```
+git clone https://github.com/bkiani-9/headroom.git
+cd headroom
+python -m pip install -r requirements.txt
 ```
 
-- The trained model file (`results/headroom_model.joblib`, 6 MB) is not in
-  git, so `train_model.py` is needed once. Everything else the app shows
-  is already in `results/`.
+On Windows with the Python launcher, `py -3.14` works in place of
+`python`. `requirements.txt` pins the exact versions used; keep
+scikit-learn at 1.9.1, or the trained model may not load.
+
+**2. Start an app:**
+
+| App | Windows | Mac / Linux | Opens |
+|---|---|---|---|
+| Second interface (dark, live one-line diagram) | double-click `run_v2.cmd`, or `.\run_v2.cmd` | `sh run_v2.sh` | http://localhost:8502 |
+| Main app (light, map and diagram) | `python -m streamlit run app.py` | `python3 -m streamlit run app.py` | http://localhost:8501 |
+
+The first page load takes a few seconds while the grid is solved; after
+that everything is cached.
+
+- The trained model (`results/headroom_model.joblib`, 6 MB) is included,
+  so no retraining is needed. `train_model.py` rebuilds it (about a minute).
 - pandapower prints a four-line numba warning when it loads. That is
   expected: numba is not installed, and the code always runs the power
   flow with `numba=False`.
@@ -118,7 +135,7 @@ py -3.14 -m streamlit run app.py   # opens http://localhost:8501
   the solver; other buses are solved live. The **Reset demo** button in
   the sidebar returns to bus 147, 0 MW, today's grid.
 
-Tests: `py -3.14 -m pytest` (9 tests).
+Tests: `python -m pytest` (9 tests).
 
 ### Rebuilding the results from scratch
 
@@ -218,6 +235,10 @@ in this repository through prompts and reviewing its output.
 - Every prompt that directed the work, including what each feature should
   do and when it was done, and approval of the ML design and its changes.
 - Step 1 of `find_capacity` (setting up the search range).
+- The second interface, written with the Claude chatbot (claude.ai):
+  `app_v2.py`, `control_room.py`, `hyperbolic.py`, `globe.py`,
+  `motion.py`, `sunny_day.py`, `peak_shaving.py`, `clear_sky.py` and
+  `run_v2.cmd`.
 
 **Done by Claude Code:**
 - Almost all of the code: `engine.py`, `app.py`, `network_plot.py`,

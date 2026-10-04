@@ -1,0 +1,16 @@
+# Headroom: the exact versions the apps were built and tested with
+# (Python 3.14). The trained model (results/headroom_model.joblib) needs
+# this scikit-learn version to load.
+pandapower==3.5.5
+streamlit==1.64.0
+plotly==7.1.0
+scikit-learn==1.9.1
+pandas==2.3.3
+numpy==2.4.6
+scipy==1.18.1
+networkx==3.7
+matplotlib==3.11.2
+joblib==1.6.0
+tqdm==4.70.1
+requests==2.34.2
+pytest==9.1.1
