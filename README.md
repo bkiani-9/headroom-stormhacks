@@ -1,5 +1,8 @@
 # Headroom
 
+> This is Headroom as it stood at the end of StormHacks, on October 4, 2026:
+> the hackathon version, kept as it was. Development continues privately.
+
 **How much new solar can each point of a local grid take before something
 breaks?**
 
@@ -101,8 +104,8 @@ is downloaded while the apps run. Tested with Python 3.14.7 on Windows.
 **1. Get the code and the libraries** (once):
 
 ```
-git clone https://github.com/bkiani-9/headroom.git
-cd headroom
+git clone https://github.com/bkiani-9/headroom-stormhacks.git
+cd headroom-stormhacks
 python -m pip install -r requirements.txt
 ```
 
